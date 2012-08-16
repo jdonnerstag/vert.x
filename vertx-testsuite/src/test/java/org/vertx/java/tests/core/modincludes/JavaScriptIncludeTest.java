@@ -24,59 +24,56 @@ import org.vertx.java.framework.TestBase;
  */
 public class JavaScriptIncludeTest extends TestBase {
 
-  @Override
-  protected void setUp() throws Exception {
-    super.setUp();
+	@Override
+	protected void setUp() throws Exception {
+		super.setUp();
+	}
 
-  }
+	@Override
+	protected void tearDown() throws Exception {
+		super.tearDown();
+	}
 
-  @Override
-  protected void tearDown() throws Exception {
-    super.tearDown();
-  }
+	@Test
+	public void testSimpleInclude() throws Exception {
+		startMod("testmod1-1");
+		startTest(getMethodName());
+	}
 
-  @Test
-  public void testSimpleInclude() throws Exception {
-    startMod("testmod1-1");
-    startTest(getMethodName());
-  }
+	@Test
+	public void testChainedInclude() throws Exception {
+		startMod("testmod2-1");
+		startTest(getMethodName());
+	}
 
-  @Test
-  public void testChainedInclude() throws Exception {
-    startMod("testmod2-1");
-    startTest(getMethodName());
-  }
+	@Test
+	public void testMultipleIncludes() throws Exception {
+		startMod("testmod3-1");
+		startTest(getMethodName());
+	}
 
-  @Test
-  public void testMultipleIncludes() throws Exception {
-    startMod("testmod3-1");
-    startTest(getMethodName());
-  }
+	@Test
+	public void testCircularInclude() throws Exception {
+		startMod("testmod4-1");
+		startTest(getMethodName());
+	}
 
-   @Test
-  public void testCircularInclude() throws Exception {
-    startMod("testmod4-1");
-    startTest(getMethodName());
-  }
+	@Test
+	public void testSimpleIncludeJar() throws Exception {
+		startMod("testmod5-1");
+		startTest(getMethodName());
+	}
 
-  @Test
-  public void testSimpleIncludeJar() throws Exception {
-    startMod("testmod5-1");
-    startTest(getMethodName());
-  }
+	@Test
+	public void testChainedIncludeJar() throws Exception {
+		startMod("testmod6-1");
+		startTest(getMethodName());
+	}
 
-  @Test
-  public void testChainedIncludeJar() throws Exception {
-    startMod("testmod6-1");
-    startTest(getMethodName());
-  }
-
-  @Test
-  public void testMultipleIncludesJar() throws Exception {
-    startMod("testmod7-1");
-    startTest(getMethodName());
-  }
-
-
+	@Test
+	public void testMultipleIncludesJar() throws Exception {
+		startMod("testmod7-1");
+		startTest(getMethodName());
+	}
 
 }

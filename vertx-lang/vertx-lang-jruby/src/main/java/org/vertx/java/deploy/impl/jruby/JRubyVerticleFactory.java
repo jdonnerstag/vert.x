@@ -16,6 +16,8 @@
 
 package org.vertx.java.deploy.impl.jruby;
 
+import java.util.List;
+
 import org.jruby.RubyException;
 import org.jruby.RubyNameError;
 import org.jruby.embed.EvalFailedException;
@@ -26,83 +28,99 @@ import org.vertx.java.deploy.Verticle;
 import org.vertx.java.deploy.VerticleFactory;
 import org.vertx.java.deploy.impl.VerticleManager;
 
-import java.util.List;
-
 /**
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
 public class JRubyVerticleFactory implements VerticleFactory {
 
-  private VerticleManager mgr;
+	private VerticleManager mgr;
 
-  public JRubyVerticleFactory() {
-  }
+	public JRubyVerticleFactory() {
+	}
 
-  @Override
-  public void init(VerticleManager mgr) {
-	  this.mgr = mgr;
-  }
+	@Override
+	public void init(VerticleManager mgr) {
+		this.mgr = mgr;
+	}
 
-  public Verticle createVerticle(String main, ClassLoader cl) throws Exception {
-    if (System.getProperty("jruby.home") == null) {
-      throw new IllegalStateException("In order to deploy Ruby applications you must set JRUBY_HOME to point " +
-          "at your JRuby installation");
-    }
-    Verticle app = new JRubyVerticle(main, cl);
-    return app;
-  }
+	@Override
+	public String getLanguage() {
+		return "ruby";
+	}
 
-  public void reportException(Throwable t) {
-    Logger logger = mgr.getLogger();
+	@Override
+	public boolean isFactoryFor(String main) {
+		if (main.endsWith(".rb")) {
+			return true;
+		}
+		return false;
+	}
+	@Override
+	public Verticle createVerticle(String main, ClassLoader cl)
+			throws Exception {
+		if (System.getProperty("jruby.home") == null) {
+			throw new IllegalStateException(
+			// The error msg is irritating since -Djruby.home=$JRUBY_HOME is
+			// what is missing"
+					"In order to deploy Ruby applications you must set JRUBY_HOME to point "
+							+ "at your JRuby installation");
+		}
+		Verticle app = new JRubyVerticle(main, cl);
+		return app;
+	}
 
-    RaiseException je = null;
-    if (t instanceof EvalFailedException) {
-      EvalFailedException e = (EvalFailedException)t;
-      Throwable cause = e.getCause();
-      if (cause instanceof RaiseException) {
-        je = (RaiseException)cause;
-      }
-    } else if (t instanceof RaiseException) {
-      je = (RaiseException)t;
-    }
+	@Override
+	public void reportException(Throwable t) {
+		Logger logger = mgr.getLogger();
 
-    if (je != null) {
+		RaiseException je = null;
+		if (t instanceof EvalFailedException) {
+			EvalFailedException e = (EvalFailedException) t;
+			Throwable cause = e.getCause();
+			if (cause instanceof RaiseException) {
+				je = (RaiseException) cause;
+			}
+		} else if (t instanceof RaiseException) {
+			je = (RaiseException) t;
+		}
 
-      RubyException re = je.getException();
+		if (je != null) {
 
-      String msg;
-      if (re instanceof RubyNameError) {
-        RubyNameError rne = (RubyNameError)re;
-        msg = "Invalid or undefined name: " + rne.name().toString();
-      } else {
-        msg = re.message.toString();
-      }
+			RubyException re = je.getException();
 
-      StringBuilder backtrace = new StringBuilder();
-      IRubyObject bt = re.backtrace();
+			String msg;
+			if (re instanceof RubyNameError) {
+				RubyNameError rne = (RubyNameError) re;
+				msg = "Invalid or undefined name: " + rne.name().toString();
+			} else {
+				msg = re.message.toString();
+			}
 
-      if (bt instanceof List) {
-        for (Object obj : (List<?>)bt) {
-          if (obj instanceof String) {
-            String line = (String)obj;
-            addToBackTrace(backtrace, line);
-          }
-        }
-      }
+			StringBuilder backtrace = new StringBuilder();
+			IRubyObject bt = re.backtrace();
 
-      logger.error("backtrace is " + backtrace);
+			if (bt instanceof List) {
+				for (Object obj : (List<?>) bt) {
+					if (obj instanceof String) {
+						String line = (String) obj;
+						addToBackTrace(backtrace, line);
+					}
+				}
+			}
 
-      logger.error("Exception in Ruby verticle: " + msg +
-        "\n" + backtrace);
-    } else {
-      logger.error("Unexpected exception in Ruby verticle", t);
-    }
-  }
+			logger.error("backtrace is " + backtrace);
 
-  private void addToBackTrace(StringBuilder backtrace, String line) {
-    if (line.contains(".rb")) {
-      //We filter out any Java stack trace
-      backtrace.append(line).append('\n');
-    }
-  }
+			logger.error("Exception in Ruby verticle: " + msg + "\n"
+					+ backtrace);
+		} else {
+			logger.error("Unexpected exception in Ruby verticle", t);
+		}
+	}
+
+	private void addToBackTrace(StringBuilder backtrace, String line) {
+		if (line.contains(".rb")) {
+			// We filter out any Java stack trace
+			backtrace.append(line).append('\n');
+		}
+	}
 }

@@ -210,7 +210,17 @@ public class DefaultVertx extends VertxInternal {
         result = workerPool;
         if (result == null) {
           ExecutorService corePool = Executors.newFixedThreadPool(corePoolSize, new VertxThreadFactory("vert.x-core-thread-"));
-          workerPool = result = new NioWorkerPool(corePool, corePoolSize);
+          workerPool = result = new NioWorkerPool(corePool, corePoolSize) {
+          	protected NioWorker createWorker(Executor executor) {
+              return new NioWorker(executor) {
+              	@Override
+              	protected void processUserTask() {
+              		// TODO Auto-generated method stub
+              		super.processUserTask();
+              	}
+              };
+          	}
+          };
         }
       }
     }

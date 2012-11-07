@@ -15,31 +15,147 @@
  */
 package org.vertx.java.core.impl;
 
+import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 
 import org.jboss.netty.channel.socket.nio.NioWorker;
+import org.vertx.java.core.logging.Logger;
+import org.vertx.java.core.logging.impl.LoggerFactory;
+import org.vertx.java.core.timer.Timer;
+import org.vertx.java.core.timer.TimerTask;
+import org.vertx.java.core.timer.impl.HashedWheelTimeout;
+import org.vertx.java.core.timer.impl.HashedWheelTimer;
+import org.vertx.java.core.utils.lang.Args;
 
 /**
- * Netty's NioWorker implements something like an event loop. Either after a selector has fired 
- * or after a timeout
+ * Netty's NioWorker implements an event loop. This implementation add timer 
+ * functionalities and thus doesn't require yet another thread. The timer itself
+ * is a modified (and improved) version of netty's HashedWheelTimer.
  * 
  * @author Juergen Donnerstag
  */
-public class NioWorkerWithTimer extends NioWorker {
+public class NioWorkerWithTimer extends NioWorker implements Timer<HashedWheelTimeout> {
 
-	// milli secs; replace Netty's default (500ms)
-	private long timeout = 200;
+  private static final Logger log = LoggerFactory.getLogger(NioWorkerWithTimer.class);
+
+	// Implements the hashed wheel timer. 
+	// Note: Access should ONLY be in the IO thread
+	private HashedWheelTimer timer;
+
+	private final long tickDuration;
 	
+	/**
+	 * Constructor
+	 * 
+	 * @param executor
+	 */
 	public NioWorkerWithTimer(final Executor executor) {
-		super(executor);
+		this(executor, 100);
 	}
 
+	/**
+	 * Constructor
+	 * 
+	 * @param executor
+	 */
+	public NioWorkerWithTimer(final Executor executor, final long tickDuration) {
+		super(executor);
+		
+		this.tickDuration = tickDuration;
+	}
+
+	/**
+	 * Replace Netty's default timeout (500ms) with something more suitable for the 
+	 * timer: time resolution (e.g. 200ms)
+	 * <p>
+	 * Executed in the IO Thread!!
+	 */
 	@Override
 	protected long getWaitTimeout(long defaultTimeout) {
-  	return this.timeout;
+		if (timer == null) {
+			timer = new HashedWheelTimer(tickDuration, TimeUnit.MILLISECONDS);
+		}
+		long sleepTime = timer.getSleepTime();
+  	return sleepTime < 0 ? 0 : Math.min(sleepTime, defaultTimeout);
 	}
-	
+
+	/**
+	 * Register
+	 * @param task
+	 * @param delay
+	 * @param unit
+	 * @param periodic
+	 * @return
+	 */
+	@Override
+	public final HashedWheelTimeout newTimeout(final TimerTask task, final long delay,
+			final TimeUnit unit, boolean periodic) {
+
+		long currentTime = System.currentTimeMillis();
+
+		Args.notNull(task, "task");
+		Args.notNull(unit, "unit");
+
+		final HashedWheelTimeout timeout = new HashedWheelTimeout(task,
+				currentTime, unit.toMillis(delay), periodic);
+
+		executeInIoThread(new Runnable() {
+			@Override
+			public void run() {
+				timer.scheduleTimeout(timeout);
+			}
+		});
+		
+		return timeout;
+	}
+
+	/**
+	 * Remove a timeout from the scheduler
+	 * 
+	 * @param timeout
+	 */
+	@Override
+	public final void remove(final HashedWheelTimeout timeout) {
+		if (timeout == null) {
+			return;
+		}
+
+		executeInIoThread(new Runnable() {
+			@Override
+			public void run() {
+				timer.remove(timeout);
+			}
+		});
+	}
+
+	/**
+	 * The underlying eventloop woke up. 
+	 * <p>
+	 * This method is always executed in the IO thread.
+	 */
 	@Override
 	protected void processUserTask() {
+		List<HashedWheelTimeout> expiredTimeouts = this.timer.getExpiredTimeouts();
+		if (expiredTimeouts != null) {
+
+			// Notify the expired timeouts.
+			for (final HashedWheelTimeout timeout : expiredTimeouts) {
+				// Change status
+				timeout.expire();
+				
+				// execute
+				executeInIoThread(new Runnable() {
+					@Override
+					public void run() {
+						try {
+							timeout.getTask().run(timeout);
+						} catch (Exception ex) {
+							log.error("Exception while executing timer task: " + ex.getMessage(), ex);
+						}
+					}
+				});
+			}
+		}
 	}
 }

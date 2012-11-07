@@ -15,8 +15,6 @@
  */
 package org.vertx.java.core.impl;
 
-import java.io.IOException;
-import java.nio.channels.Selector;
 import java.util.concurrent.Executor;
 
 import org.jboss.netty.channel.socket.nio.NioWorker;
@@ -29,7 +27,7 @@ import org.jboss.netty.channel.socket.nio.NioWorker;
  */
 public class NioWorkerWithTimer extends NioWorker {
 
-	// milli secs
+	// milli secs; replace Netty's default (500ms)
 	private long timeout = 200;
 	
 	public NioWorkerWithTimer(final Executor executor) {
@@ -37,8 +35,8 @@ public class NioWorkerWithTimer extends NioWorker {
 	}
 
 	@Override
-	protected int select(Selector selector, long defaultTimeout) throws IOException {
-  	return super.select(selector, timeout);
+	protected long getWaitTimeout(long defaultTimeout) {
+  	return this.timeout;
 	}
 	
 	@Override

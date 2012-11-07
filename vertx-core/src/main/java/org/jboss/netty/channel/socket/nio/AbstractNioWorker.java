@@ -218,8 +218,8 @@ abstract class AbstractNioWorker implements Worker {
         assert selector != null && selector.isOpen();
     }
 
-    protected int select(Selector selector, long timeout) throws IOException {
-    	return SelectorUtil.select(selector, timeout);
+    protected long getWaitTimeout(long timeout) {
+    	return timeout;
     }
     
     public void run() {
@@ -244,7 +244,7 @@ abstract class AbstractNioWorker implements Worker {
 
             try {
                 long beforeSelect = System.nanoTime();
-                int selected = select(selector, SelectorUtil.SELECT_TIMEOUT);
+                int selected = SelectorUtil.select(selector, getWaitTimeout(SelectorUtil.SELECT_TIMEOUT));
                 if (SelectorUtil.EPOLL_BUG_WORKAROUND && selected == 0 && !wakenupFromLoop && !wakenUp.get()) {
                     long timeBlocked = System.nanoTime() - beforeSelect;
 

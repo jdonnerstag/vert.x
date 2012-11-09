@@ -36,7 +36,7 @@ public class HashedWheelTimerTest {
 
 	@Test
 	public void testDefaultConstructor() {
-		HashedWheelTimer worker = new HashedWheelTimer();
+		HashedWheelTimerImpl worker = new HashedWheelTimerImpl();
 		assertNotNull(worker);
 		assertNull(worker.getExpiredTimeouts());
 		assertTrue(worker.getUnprocessedTimeouts().isEmpty());
@@ -44,19 +44,19 @@ public class HashedWheelTimerTest {
 
 	@Test(expected = IllegalArgumentException.class)
 	public void testRemoveNull() {
-		HashedWheelTimer worker = new HashedWheelTimer();
+		HashedWheelTimerImpl worker = new HashedWheelTimerImpl();
 		worker.remove(null);
 	}
 
 	@Test(expected = IllegalArgumentException.class)
 	public void testScheduleNull() {
-		HashedWheelTimer worker = new HashedWheelTimer();
+		HashedWheelTimerImpl worker = new HashedWheelTimerImpl();
 		worker.scheduleTimeout(null);
 	}
 
 	@Test
 	public void testEmptyNotifier() {
-		HashedWheelTimer worker = new HashedWheelTimer();
+		HashedWheelTimerImpl worker = new HashedWheelTimerImpl();
 		assertNotNull(worker);
 		worker.notifyExpiredTimeouts(null);
 
@@ -64,7 +64,7 @@ public class HashedWheelTimerTest {
 		worker.notifyExpiredTimeouts(expired);
 	}
 
-	class TestHashedWheelTimerWorker extends HashedWheelTimer {
+	class TestHashedWheelTimerWorker extends HashedWheelTimerImpl {
 		long timeMillis = 0;
 
 		@Override

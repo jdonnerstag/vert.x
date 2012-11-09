@@ -17,7 +17,7 @@
 package org.vertx.java.core.impl;
 
 import org.jboss.netty.channel.socket.nio.NioWorker;
-import org.jboss.netty.channel.socket.nio.NioWorkerPool;
+import org.jboss.netty.channel.socket.nio.NioWorkerWithTimerPool;
 import org.jboss.netty.util.HashedWheelTimer;
 import org.jboss.netty.util.Timeout;
 import org.jboss.netty.util.Timer;
@@ -66,15 +66,15 @@ public class DefaultVertx extends VertxInternal {
   private int corePoolSize = Runtime.getRuntime().availableProcessors();
   private ExecutorService backgroundPool;
   private OrderedExecutorFactory orderedFact;
-  private NioWorkerPool workerPool;
+  private NioWorkerWithTimerPool workerPool;
   private ExecutorService acceptorPool;
   private Map<ServerID, DefaultHttpServer> sharedHttpServers = new HashMap<>();
   private Map<ServerID, DefaultNetServer> sharedNetServers = new HashMap<>();
 
   private final ThreadLocal<Context> contextTL = new ThreadLocal<>();
 
-  //For now we use a hashed wheel with it's own thread for timeouts - ideally the event loop would have
-  //it's own hashed wheel
+  // For now we use a hashed wheel with it's own thread for timeouts - ideally the event loop would have
+  // it's own hashed wheel
   private HashedWheelTimer timer = new HashedWheelTimer(new VertxThreadFactory("vert.x-timer-thread"), 1,
       TimeUnit.MILLISECONDS, 8192);
   {
@@ -202,16 +202,16 @@ public class DefaultVertx extends VertxInternal {
     return result;
   }
 
-  public NioWorkerPool getWorkerPool() {
+  public NioWorkerWithTimerPool getWorkerPool() {
     //This is a correct implementation of double-checked locking idiom
-    NioWorkerPool result = workerPool;
+  	NioWorkerWithTimerPool result = workerPool;
     if (result == null) {
       synchronized (this) {
         result = workerPool;
         if (result == null) {
           ExecutorService corePool = Executors.newFixedThreadPool(corePoolSize, new VertxThreadFactory("vert.x-core-thread-"));
-          workerPool = result = new NioWorkerPool(corePool, corePoolSize) {
-          	protected NioWorker createWorker(Executor executor) {
+          workerPool = result = new NioWorkerWithTimerPool(corePool, corePoolSize) {
+          	protected NioWorkerWithTimer createWorker(Executor executor) {
               return new NioWorkerWithTimer(executor);
           	}
           };

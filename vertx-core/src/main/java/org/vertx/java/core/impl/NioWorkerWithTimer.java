@@ -25,7 +25,7 @@ import org.vertx.java.core.logging.impl.LoggerFactory;
 import org.vertx.java.core.timer.Timer;
 import org.vertx.java.core.timer.TimerTask;
 import org.vertx.java.core.timer.impl.HashedWheelTimeout;
-import org.vertx.java.core.timer.impl.HashedWheelTimer;
+import org.vertx.java.core.timer.impl.HashedWheelTimerImpl;
 import org.vertx.java.core.utils.lang.Args;
 
 /**
@@ -41,7 +41,7 @@ public class NioWorkerWithTimer extends NioWorker implements Timer<HashedWheelTi
 
 	// Implements the hashed wheel timer. 
 	// Note: Access should ONLY be in the IO thread
-	private HashedWheelTimer timer;
+	private HashedWheelTimerImpl timer;
 
 	private final long tickDuration;
 	
@@ -66,6 +66,14 @@ public class NioWorkerWithTimer extends NioWorker implements Timer<HashedWheelTi
 	}
 
 	/**
+	 * Subclasses may provide their own timer
+	 * @return
+	 */
+	protected HashedWheelTimerImpl newTimer() {
+		return new HashedWheelTimerImpl(tickDuration, TimeUnit.MILLISECONDS, 8192);
+	}
+	
+	/**
 	 * Replace Netty's default timeout (500ms) with something more suitable for the 
 	 * timer: time resolution (e.g. 200ms)
 	 * <p>
@@ -74,7 +82,7 @@ public class NioWorkerWithTimer extends NioWorker implements Timer<HashedWheelTi
 	@Override
 	protected long getWaitTimeout(long defaultTimeout) {
 		if (timer == null) {
-			timer = new HashedWheelTimer(tickDuration, TimeUnit.MILLISECONDS);
+			timer = newTimer();
 		}
 		long sleepTime = timer.getSleepTime();
   	return sleepTime < 0 ? 0 : Math.min(sleepTime, defaultTimeout);

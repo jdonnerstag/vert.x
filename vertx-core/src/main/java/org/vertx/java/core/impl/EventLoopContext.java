@@ -16,8 +16,6 @@
 
 package org.vertx.java.core.impl;
 
-import org.jboss.netty.channel.socket.nio.NioWorker;
-
 import java.util.concurrent.Executor;
 
 /**
@@ -25,7 +23,7 @@ import java.util.concurrent.Executor;
  */
 public class EventLoopContext extends Context {
 
-  private final NioWorker worker;
+  private final NioWorkerWithTimer worker;
 
   public EventLoopContext(VertxInternal vertx, Executor bgExec, NioWorker worker) {
     super(vertx, bgExec);
@@ -36,7 +34,7 @@ public class EventLoopContext extends Context {
     worker.executeInIoThread(wrapTask(task), true);
   }
 
-  public NioWorker getWorker() {
+  public NioWorkerWithTimer getWorker() {
     return worker;
   }
 }

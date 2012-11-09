@@ -17,6 +17,8 @@ package org.jboss.netty.channel.socket.nio;
 
 import java.util.concurrent.Executor;
 
+import org.vertx.java.core.impl.NioWorkerWithTimer;
+
 
 /**
  * Pool of NioWorkerWithTimer
@@ -24,14 +26,14 @@ import java.util.concurrent.Executor;
  * TODO The reason why this class is needed, is because the underlying AbstractNioWorkerPool
  * constructor is not public!!! => raise ticket with Netty
  */
-public class NioWorkerWithTimerPool extends AbstractNioWorkerPool<NioWorker> {
+public class NioWorkerWithTimerPool extends AbstractNioWorkerPool<NioWorkerWithTimer> {
 
     public NioWorkerWithTimerPool(Executor workerExecutor, int workerCount) {
         super(workerExecutor, workerCount);
     }
 
     @Override
-    protected NioWorker createWorker(Executor executor) {
-        return new NioWorker(executor);
+    protected NioWorkerWithTimer createWorker(Executor executor) {
+        return new NioWorkerWithTimer(executor);
     }
 }

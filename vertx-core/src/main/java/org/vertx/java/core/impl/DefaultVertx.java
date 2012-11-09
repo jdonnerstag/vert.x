@@ -16,7 +16,6 @@
 
 package org.vertx.java.core.impl;
 
-import org.jboss.netty.channel.socket.nio.NioWorker;
 import org.jboss.netty.channel.socket.nio.NioWorkerWithTimerPool;
 import org.jboss.netty.util.HashedWheelTimer;
 import org.jboss.netty.util.Timeout;
@@ -81,7 +80,7 @@ public class DefaultVertx extends VertxInternal {
     timer.start();
   }
   private final AtomicLong timeoutCounter = new AtomicLong(0);
-  private final Map<Long, TimeoutHolder> timeouts = new ConcurrentHashMap<>();
+	private final Map<Long, Timeout> timeouts = new ConcurrentHashMap<>();
 
   public DefaultVertx() {
     this.eventBus = new DefaultEventBus(this);
@@ -210,11 +209,7 @@ public class DefaultVertx extends VertxInternal {
         result = workerPool;
         if (result == null) {
           ExecutorService corePool = Executors.newFixedThreadPool(corePoolSize, new VertxThreadFactory("vert.x-core-thread-"));
-          workerPool = result = new NioWorkerWithTimerPool(corePool, corePoolSize) {
-          	protected NioWorkerWithTimer createWorker(Executor executor) {
-              return new NioWorkerWithTimer(executor);
-          	}
-          };
+          workerPool = result = new NioWorkerWithTimerPool(corePool, corePoolSize);
         }
       }
     }
@@ -293,14 +288,14 @@ public class DefaultVertx extends VertxInternal {
 
   public Context createEventLoopContext() {
     getBackgroundPool();
-    NioWorker worker = getWorkerPool().nextWorker();
+    NioWorkerWithTimer worker = getWorkerPool().nextWorker();
     return new EventLoopContext(this, orderedFact.getExecutor(), worker);
   }
 
   private boolean cancelTimeout(long id) {
-    TimeoutHolder holder = timeouts.remove(id);
-    if (holder != null) {
-      holder.timeout.cancel();
+    Timeout timeout = timeouts.remove(id);
+    if (timeout != null) {
+      timeout.cancel();
       return true;
     } else {
       return false;
@@ -319,7 +314,7 @@ public class DefaultVertx extends VertxInternal {
     }
     Timeout timeout = timer.newTimeout(ttask, delay, TimeUnit.MILLISECONDS);
     id = id != -1 ? id : timeoutCounter.getAndIncrement();
-    timeouts.put(id, new TimeoutHolder(timeout, context));
+    timeouts.put(id, timeout);
     return id;
   }
 
@@ -411,16 +406,6 @@ public class DefaultVertx extends VertxInternal {
 
     public void run() {
       handler.handle(timerID);
-    }
-  }
-
-  private static class TimeoutHolder {
-    final Timeout timeout;
-    // final Context context;
-
-    TimeoutHolder(Timeout timeout, Context context) {
-      this.timeout = timeout;
-      // this.context = context;
     }
   }
 }

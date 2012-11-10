@@ -74,12 +74,18 @@ public class HashedWheelTimerImpl {
 	// The wheel: Essentially a List of List with HashedWheelTimeout objects
 	private final WheelWithBuckets<HashedWheelTimeout> wheel;
 
-	// The last bucket visited
+	// The index of last bucket visited
 	private int tick;
 
 	// == startTime + tick * tickDuration
 	private long lastDeadline;
 
+	// Every timeout gets an ID assigned
+	private long idCounter;
+	
+	// Helper for ID generator
+	private int mask;
+	
 	/**
 	 * Constructor
 	 */
@@ -124,6 +130,13 @@ public class HashedWheelTimerImpl {
 
 		this.lastDeadline = currentTimeMillis();
 		this.tick = 0;
+		
+		// use the actual wheel size
+		int size = this.wheel.size();
+		this.mask = Integer.SIZE - Integer.numberOfLeadingZeros(size);
+		if ((1 << (this.mask - 1)) >= size) {
+			this.mask -= 1;
+		}
 	}
 
 	/**
@@ -191,9 +204,23 @@ public class HashedWheelTimerImpl {
 
 		final long diff = timeout.deadline - this.lastDeadline;
 
-		timeout.stopIndex = (int) (tick + diff / tickDuration);
+		int stopIndex = (int) (tick + diff / tickDuration) % wheel.size();
 
-		wheel.add(timeout.stopIndex, timeout);
+		// An ID with a hint to efficiently find the timeout by ID
+		if (++this.idCounter < 0) {
+			this.idCounter = 0;
+		}
+		
+		// New timeout or rescheduled entry (periodic)
+		if (timeout.id == 0) {
+			timeout.id = (this.idCounter << this.mask) + stopIndex;
+		} else {
+			// do not change the "counter" 
+			long m = -(1L << this.mask);
+			timeout.id = (timeout.id & m) + stopIndex;
+		}
+		
+		wheel.add(stopIndex, timeout);
 	}
 
 	/**
@@ -203,7 +230,7 @@ public class HashedWheelTimerImpl {
 	 */
 	public final void remove(final HashedWheelTimeout timeout) {
 		Args.notNull(timeout, "timeout");
-		this.wheel.remove(timeout.stopIndex, timeout);
+		remove(timeout.id, timeout.delay != 0);
 	}
 
 	/**
@@ -220,7 +247,10 @@ public class HashedWheelTimerImpl {
 		while (iter.hasNext()) {
 			HashedWheelTimeout timeout = iter.next();
 			if (timeout != null) {
-				if (timeout.deadline <= deadline) {
+				if (timeout.isExpired() || timeout.isCancelled()) {
+					// Cleanup: Remove already expired or canceled elements
+					iter.remove();
+				} else if (timeout.deadline <= deadline) {
 					if (expiredTimeouts == null) {
 						expiredTimeouts = new ArrayList<>();
 					}
@@ -231,10 +261,6 @@ public class HashedWheelTimerImpl {
 					if (timeout.isPeriodic()) {
 						reschedulePeriodic(timeout);
 					}
-
-				} else if (timeout.isExpired() || timeout.isCancelled()) {
-					// Cleanup: Remove already expired or canceled elements
-					iter.remove();
 				}
 			}
 		}
@@ -271,6 +297,58 @@ public class HashedWheelTimerImpl {
 		}
 	}
 
+	/**
+	 * Find timeout by ID
+	 * 
+	 * @param id
+	 * @return
+	 */
+	public final HashedWheelTimeout find(final long id) {
+		return findAndRemove(id, false);
+	}
+	
+	private HashedWheelTimeout findAndRemove(final long id, boolean remove) {
+		int index = (int)(id & ((1 << this.mask) - 1));
+		Iterator<HashedWheelTimeout> iter = wheel.iterator(index);
+		while (iter.hasNext()) {
+			HashedWheelTimeout timeout = iter.next();
+			if (timeout != null) {
+				if (timeout.id == id) {
+					if (remove) {
+						iter.remove();
+					}
+					return timeout;
+				}
+			}
+		}
+		
+		return null;
+	}
+
+	/**
+	 * Remove timeout by ID
+	 * 
+	 * @param id
+	 * @return
+	 */
+	public final HashedWheelTimeout remove(long id, final boolean periodic) {
+		if (periodic == false) {
+			return findAndRemove(id, true);
+		}
+		
+		long m = -(1L << this.mask);
+		id &= m;
+		Iterator<HashedWheelTimeout> iter = wheel.getAllEntries().iterator();
+		while(iter.hasNext()) {
+			HashedWheelTimeout entry = iter.next();
+			if ((entry.id & m) == id) {
+				remove(entry.id, false);
+				return entry;
+			}
+		}
+		return null;
+	}
+	
 	@Override
 	public String toString() {
 		return "lastDeadline: " + lastDeadline + "; tick: " + tick

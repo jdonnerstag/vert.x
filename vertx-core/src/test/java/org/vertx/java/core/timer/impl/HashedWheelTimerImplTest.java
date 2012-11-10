@@ -30,9 +30,9 @@ import org.vertx.java.core.logging.impl.LoggerFactory;
 import org.vertx.java.core.timer.Timeout;
 import org.vertx.java.core.timer.TimerTask;
 
-public class HashedWheelTimerTest {
+public class HashedWheelTimerImplTest {
 
-	private static final Logger log = LoggerFactory.getLogger(HashedWheelTimerTest.class);
+	private static final Logger log = LoggerFactory.getLogger(HashedWheelTimerImplTest.class);
 
 	@Test
 	public void testDefaultConstructor() {
@@ -176,6 +176,64 @@ public class HashedWheelTimerTest {
 		worker.remove(t);
 		assertNull(worker.getExpiredTimeouts());
 		assertEquals(0, worker.getUnprocessedTimeouts().size());
+	}
+
+	@Test
+	public void testRemoveById() {
+		TestHashedWheelTimerWorker worker = new TestHashedWheelTimerWorker();
+		assertNotNull(worker);
+
+//		{
+//			HashedWheelTimeout t = createDummyTimeout(worker.timeMillis, 1);
+//			worker.scheduleTimeout(t);
+//			assertNotNull(t.id);
+//			assertEquals(t.id, 1 * 1024 + t.stopIndex);
+//			assertEquals(t, worker.remove(t.id, false));
+//			assertNull(worker.getExpiredTimeouts());
+//		}
+//		
+//		{
+//			HashedWheelTimeout t = createDummyTimeout(worker.timeMillis, 500);
+//			worker.scheduleTimeout(t);
+//			assertNotNull(t.id);
+//			assertTrue(t.id > 2 * 1024);
+//			assertEquals(t.id, 2 * 1024 + t.stopIndex);
+//			assertEquals(t, worker.remove(t.id, false));
+//			assertNull(worker.getExpiredTimeouts());
+//		}
+//
+//		{
+//			HashedWheelTimeout t = createDummyTimeout(worker.timeMillis, 200_000);
+//			worker.scheduleTimeout(t);
+//			assertNotNull(t.id);
+//			assertTrue(t.id > 3 * 1024);
+//			assertEquals(t.id, 3 * 1024 + t.stopIndex);
+//			assertEquals(t, worker.remove(t.id, false));
+//			assertNull(worker.getExpiredTimeouts());
+//		}
+		
+		{
+			// periodic
+			HashedWheelTimeout t = new HashedWheelTimeout(task, worker.timeMillis, 200, true);
+			worker.scheduleTimeout(t);
+
+			assertNotNull(t.id);
+			assertTrue(t.id > 1 * 1024);
+			assertEquals(t.id, 1026);
+			long id = t.id;
+			
+			worker.timeMillis += 201;
+			assertEquals(1, worker.getExpiredTimeouts().size());
+
+			worker.timeMillis += 201;
+			assertEquals(1, worker.getExpiredTimeouts().size());
+
+			worker.timeMillis += 201;
+			assertEquals(1, worker.getExpiredTimeouts().size());
+
+			assertEquals(t, worker.remove(id, true));
+			assertNull(worker.getExpiredTimeouts());
+		}
 	}
 
 	@Test

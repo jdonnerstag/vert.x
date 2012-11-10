@@ -29,12 +29,13 @@ public class HashedWheelTimeout implements Timeout {
 	// Earliest expire time
 	long deadline;
 
-	// wheel[stopIndex] = ...
-	int stopIndex;
-
 	// Only != 0, if periodic
 	final long delay;
 
+	// Allow the timeout to be identified by ID. 
+	// Note: For periodic timeouts the ID is not stable. 
+	long id;
+	
 	// The task to be executed upon timeout
 	private final TimerTask task;
 
@@ -115,8 +116,6 @@ public class HashedWheelTimeout implements Timeout {
 		} else if (isExpired()) {
 			buf.append(", expired");
 		}
-
-		buf.append(", stopIndex: ").append(stopIndex);
 
 		if (isPeriodic()) {
 			buf.append(", periodic");

@@ -22,6 +22,7 @@ import org.jboss.netty.channel.ChannelFuture;
 import org.jboss.netty.channel.ChannelFutureListener;
 import org.jboss.netty.handler.codec.http.*;
 import org.vertx.java.core.Handler;
+import org.vertx.java.core.Vertx;
 import org.vertx.java.core.buffer.Buffer;
 import org.vertx.java.core.file.impl.PathAdjuster;
 import org.vertx.java.core.http.HttpServerResponse;
@@ -235,7 +236,7 @@ public class DefaultHttpServerResponse extends HttpServerResponse {
     }
   }
 
-  public DefaultHttpServerResponse sendFile(String filename) {
+  public DefaultHttpServerResponse sendFile(final Vertx vertx, String filename) {
     if (headWritten) {
       throw new IllegalStateException("Head already written");
     }

@@ -16,6 +16,7 @@
 
 package org.vertx.java.core.impl;
 
+import org.vertx.java.core.Vertx;
 import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
 
@@ -46,8 +47,6 @@ public abstract class Context {
     this.vertx = vertx;
   	this.bgExec = bgExec;
     this.tccl = Thread.currentThread().getContextClassLoader();
-  }
-
   public void setTCCL() {
     Thread.currentThread().setContextClassLoader(tccl);
   }

@@ -18,6 +18,8 @@ package org.vertx.java.core.impl;
 
 import java.util.concurrent.Executor;
 
+import org.vertx.java.core.Vertx;
+
 /**
  * @author <a href="http://tfox.org">Tim Fox</a>
  */

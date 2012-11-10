@@ -18,6 +18,7 @@ package org.vertx.java.core.net.impl;
 
 import org.jboss.netty.channel.FixedReceiveBufferSizePredictor;
 import org.jboss.netty.channel.socket.nio.NioSocketChannel;
+import org.vertx.java.core.Vertx;
 import org.vertx.java.core.file.impl.PathAdjuster;
 import org.vertx.java.core.impl.VertxInternal;
 import org.vertx.java.core.logging.Logger;

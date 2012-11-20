@@ -17,7 +17,6 @@
 package org.vertx.java.core.impl;
 
 import org.jboss.netty.channel.socket.nio.NioWorker;
-import org.vertx.java.core.Vertx;
 
 import java.util.concurrent.Executor;
 

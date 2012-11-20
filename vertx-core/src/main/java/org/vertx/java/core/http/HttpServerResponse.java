@@ -18,7 +18,6 @@ package org.vertx.java.core.http;
 
 import org.jboss.netty.handler.codec.http.HttpResponseStatus;
 import org.vertx.java.core.Handler;
-import org.vertx.java.core.Vertx;
 import org.vertx.java.core.buffer.Buffer;
 import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
@@ -182,7 +181,7 @@ public abstract class HttpServerResponse implements WriteStream {
    * (where supported by the underlying operating system.
    * This is a very efficient way to serve files.<p>
    */
-  public abstract HttpServerResponse sendFile(Vertx vertx, String filename);
+  public abstract HttpServerResponse sendFile(String filename);
 
   /**
    * Close the underlying TCP connection

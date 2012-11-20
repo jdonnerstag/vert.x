@@ -334,7 +334,7 @@ public class HttpTestClient extends TestClientBase {
     startServer(new Handler<HttpServerRequest>() {
       public void handle(HttpServerRequest req) {
         if (sendFile) {
-          tu.azzert(req.response.sendFile(vertx, file.getAbsolutePath()) == req.response);
+          tu.azzert(req.response.sendFile(file.getAbsolutePath()) == req.response);
           file.delete();
         } else {
           tu.azzert(req.response.setChunked(true) == req.response);
@@ -1479,7 +1479,7 @@ public class HttpTestClient extends TestClientBase {
         }
 
         try {
-          resp.sendFile(vertx, "asokdasokd");
+          resp.sendFile("asokdasokd");
           tu.azzert(false, "Should throw exception");
         } catch (IllegalStateException e) {
           //OK
@@ -1856,7 +1856,7 @@ public class HttpTestClient extends TestClientBase {
 
     startServer(new Handler<HttpServerRequest>() {
       public void handle(HttpServerRequest req) {
-        req.response.sendFile(vertx, file.getAbsolutePath());
+        req.response.sendFile(file.getAbsolutePath());
       }
     });
 
@@ -1883,7 +1883,7 @@ public class HttpTestClient extends TestClientBase {
     startServer(new Handler<HttpServerRequest>() {
       public void handle(HttpServerRequest req) {
         req.response.putHeader("Content-Type", "wibble");
-        req.response.sendFile(vertx, file.getAbsolutePath());
+        req.response.sendFile(file.getAbsolutePath());
       }
     });
 

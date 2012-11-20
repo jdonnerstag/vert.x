@@ -16,7 +16,6 @@
 
 package org.vertx.java.core.file.impl;
 
-import org.vertx.java.core.Vertx;
 import org.vertx.java.core.impl.Context;
 import org.vertx.java.core.impl.VertxInternal;
 

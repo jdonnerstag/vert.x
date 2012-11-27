@@ -155,13 +155,3 @@ public class Args {
 		return String.format(msg, params);
 	}
 }
-	 * 
-	 * @param msg
-	 * @param params
-	 * @return formatted message
-	 */
-	static String format(String msg, final Object... params) {
-		msg = msg.replaceAll("\\{\\}", "%s");
-		return String.format(msg, params);
-	}
-}

@@ -233,7 +233,6 @@ public class TestBase extends TestCase {
 		};
 
     verticleManager.deployVerticle(worker, main, config, new URL[]{url}, instances, null, doneHandler);
-				instances, null, doneHandler);
 
 		if (!doneLatch.await(30, TimeUnit.SECONDS)) {
 			throw new IllegalStateException(

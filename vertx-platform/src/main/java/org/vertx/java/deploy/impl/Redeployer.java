@@ -39,6 +39,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * within that directory tree gets modified, wait for a short while (grace period) for all 
  * copies, zip exports etc. to finish. Than initiate a redeploy of that deployment (or module?).
  * 
+ * @author <a href="http://tfox.org">Tim Fox</a>
  * @author Juergen Donnerstag
  */
 public class Redeployer {

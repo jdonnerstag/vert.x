@@ -16,9 +16,6 @@
 
 package org.vertx.java.deploy.impl;
 
-import org.vertx.java.core.Handler;
-import org.vertx.java.core.file.impl.ChangeListener;
-import org.vertx.java.core.file.impl.FolderWatcher;
 import org.vertx.java.core.file.impl.FolderWatcher.WatchDirContext;
 import org.vertx.java.core.impl.Context;
 import org.vertx.java.core.impl.VertxInternal;
@@ -29,6 +26,7 @@ import org.vertx.java.core.utils.lang.Args;
 import java.io.File;
 import java.nio.file.*;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
@@ -38,16 +36,16 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * Monitor the file system where the modules are deployed. In case any directory or file 
  * within that directory tree gets modified, wait for a short while (grace period) for all 
  * copies, zip exports etc. to finish. Than initiate a redeploy of that deployment (or module?).
+ * <p>
+ * This is an abstract base class providing common functionalities. Subclasses may e.g. use 
+ * different type of filesystem watch services.
  * 
  * @author <a href="http://tfox.org">Tim Fox</a>
  * @author Juergen Donnerstag
  */
-public class Redeployer {
+public abstract class Redeployer {
 
   private static final Logger log = LoggerFactory.getLogger(Redeployer.class);
-
-  // Periodic timer: process the file system events
-  private static final long CHECK_PERIOD = 200;
 
   private final VertxInternal vertx;
   
@@ -58,12 +56,6 @@ public class Redeployer {
   // ModuleReloader will be informed about changes and actually redeploy the module
   private final ModuleReloader reloader;
   
-  // Periodic timer: every CHECK_PERIOD
-  private final long timerID;
-  
-  // The underlying file system watcher
-  private final FolderWatcher watchService;
-  
   // All processing and all changes are done in the timer context => single thread
   private Context ctx;
   
@@ -71,7 +63,7 @@ public class Redeployer {
   private boolean closed;
 
   // The deployments actively monitored.
-  private final Map<Path, Set<Deployment>> watchedDeployments = new HashMap<>();
+  private final Map<Path, Set<Deployment>> watchedDeployments = new ConcurrentHashMap<>();
 
   // Asynchronously ask Redeployer to register or unregister additional Modules.
   // Actual processing happens in the timer thread => single threaded.
@@ -89,71 +81,21 @@ public class Redeployer {
     this.vertx = Args.notNull(vertx, "vertx");
     this.modRoot = Args.notNull(modRoot, "modRoot");
     this.reloader = Args.notNull(reloader, "reloader");
-
-    // Get and start the watch service
-    watchService = newFolderWatcher();
-    if (watchService == null) {
-    	throw new NullPointerException("newFolderWatcher() must not return null");
-    }
-    
-    // Start a new periodic timer to regularly process the watcher events
-    timerID = vertx.setPeriodic(CHECK_PERIOD, new Handler<Long>() {
-      public void handle(Long id) {
-      	// Timer shutdown is asynchronous and might not have completed yet.
-      	if (closed) {
-      		vertx.cancelTimer(timerID);
-      		return;
-      	}
-      	
-        if (ctx == null) {
-          ctx = Redeployer.this.vertx.getContext();
-        } else {
-          checkContext();
-        }
-        
-        try {
-        	onTimerEvent();
-        } catch (ClosedWatchServiceException e) {
-        	// Should never happen ...
-          log.warn("FolderWatcher has been closed already");
-        } catch (Exception e) {
-          log.error("Error while checking file system events", e);
-        }
-      }
-    });
   }
 
-  /**
-   * @return By default, the vertx provided folder watcher gets used.
-   */
-  public FolderWatcher newFolderWatcher() {
-  	return vertx.folderWatcher(true);
-  }
+  protected final VertxInternal vertx() { return vertx; }
 
-  /**
-   * Process module registration and unregistration, and any file system events.
-   * {@link #onGraceEvent(WatchDirContext)} can be subclassed to change how file system
-   * changes get handled.
-   */
-  private void onTimerEvent() {
-    processUndeployments();
-    processDeployments();
-    watchService.processEvents();
-  }
+  protected final File modRoot() { return modRoot; }
 
   /**
    * Shutdown the service. Free up all resources.
    */
   public void close() {
   	this.closed = true;
-    this.vertx.cancelTimer(timerID);
-
-    // Stop the folder watcher only if it's not the vertx default folder watcher
-    if ((watchService != null) && (watchService != vertx.folderWatcher(false))) {
-			watchService.close();
-    }
   }
 
+  protected boolean closed() { return closed; }
+  
   /**
    * Inform Redeployer that a new module has been deployed. Start monitoring it.
    * 
@@ -184,11 +126,8 @@ public class Redeployer {
 
   /**
    * Process the deployment requests.
-   * <p>
-   * All deployments and undeployments, and all processing, happens on the same context (thread). 
-   * => No need to synchronize between them.
    */
-  private void processDeployments() {
+  protected final void processDeployments() {
     Deployment dep;
     while ((dep = toDeploy.poll()) != null) {
     	Path modDir = new File(modRoot, dep.modName).toPath();
@@ -203,17 +142,7 @@ public class Redeployer {
       if (deps == null) {
         deps = new HashSet<>();
         watchedDeployments.put(modDir, deps);
-        try {
-	        watchService.register(modDir, true, new ChangeListener() {
-						@Override
-						public void onGraceEvent(final WatchDirContext wdir) {
-							Redeployer.this.onGraceEvent(wdir);
-						}
-					});
-        } catch (ClosedWatchServiceException ex) {
-        	// FolderWatcher has (accidently) been closed behind the scene ...
-        	log.error("FolderWatcher has been closed. New Deployments can not be registered: " + modDir);
-        }
+       	registerDeployment(modDir);
       }
 
       // Associated the deployment with the path
@@ -226,11 +155,8 @@ public class Redeployer {
 
   /**
    * Process the undeployment requests
-   * <p>
-   * All deployments and undeployments, and all processing, happens on the same context (thread). 
-   * => No need to synchronize between them.
    */
-  private void processUndeployments() {
+  protected final void processUndeployments() {
     Deployment dep;
     while ((dep = toUndeploy.poll()) != null) {
       Path modDir = new File(modRoot, dep.modName).toPath();
@@ -243,11 +169,15 @@ public class Redeployer {
       deps.remove(dep);
       if (deps.isEmpty()) {
         watchedDeployments.remove(modDir);
-       	watchService.unregister(modDir);
+       	unregisterDeployment(modDir);
       }
     }
   }
 
+  protected abstract void registerDeployment(Path modDir);
+
+  protected abstract void unregisterDeployment(Path modDir);
+  
   /**
    * Something has changed on the file system (dir and subdirs) and the grace period passed
    * by without any new changes.
@@ -264,10 +194,16 @@ public class Redeployer {
     }
   }
 
-  private void checkContext() {
-    // Sanity check
-    if (vertx.getContext() != ctx) {
-      throw new IllegalStateException("Got context: " + vertx.getContext() + ". Expected: " + ctx);
+  /**
+   * Assign the context if needed. Else make sure we are in the right context (same thread).
+   */
+  protected void checkContext() {
+    if (ctx == null) {
+      ctx = vertx.getContext();
+    } else {
+      if (vertx.getContext() != ctx) {
+        throw new IllegalStateException("Got context: " + vertx.getContext() + ". Expected: " + ctx);
+      }
     }
   }
 }

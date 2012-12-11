@@ -31,15 +31,14 @@ import java.util.concurrent.TimeUnit;
 /**
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
-public class RedeployerTest {
+public class DefaultRedeployerTest {
 
-  @SuppressWarnings("unused")
-	private static final Logger log = LoggerFactory.getLogger(RedeployerTest.class);
+	private static final Logger log = LoggerFactory.getLogger(DefaultRedeployerTest.class);
 
-  private static VertxInternal vertx;
-  private TestReloader reloader;
-  private File modRoot;
-  private Redeployer red;
+  protected static VertxInternal vertx;
+  protected TestReloader reloader;
+  protected File modRoot;
+  protected Redeployer red;
 
   @BeforeClass
   public static void oneTimeSetUp() throws Exception {
@@ -59,9 +58,13 @@ public class RedeployerTest {
       modRoot.mkdir();
     }
     
-    red = new DefaultRedeployer(vertx, modRoot, reloader);
+    red = newRedeployer(vertx, modRoot, reloader);
   }
 
+  protected Redeployer newRedeployer(final VertxInternal vertx, final File modRoot, final ModuleReloader reloader) {
+  	return new DefaultRedeployer(vertx, modRoot, reloader);
+  }
+  
   @After
   public void tearDown() throws Exception {
     red.close();
@@ -148,6 +151,7 @@ public class RedeployerTest {
 
   @Test
   public void testDeleteFileInSubDirectory() throws Exception {
+  	log.error("testDeleteFileInSubDirectory");
     String modName = "my-mod";
     File modDir = createModDir(modName);
     createFile(modDir, "foo.js", TestUtils.randomAlphaString(1000));
@@ -155,7 +159,8 @@ public class RedeployerTest {
     createFile(subDir, "bar.txt", TestUtils.randomAlphaString(1000));
     Deployment dep = createDeployment("dep1", "my-mod", null);
     red.moduleDeployed(dep);
-    Thread.sleep(500);
+    Thread.sleep(3000);
+  	log.error("delete the file");
     deleteFile(subDir, "bar.txt");
     waitReload(dep);
   }

@@ -16,7 +16,6 @@
 
 package org.vertx.java.deploy.impl;
 
-import org.vertx.java.core.file.impl.FolderWatcher.WatchDirContext;
 import org.vertx.java.core.impl.Context;
 import org.vertx.java.core.impl.VertxInternal;
 import org.vertx.java.core.logging.Logger;
@@ -184,20 +183,20 @@ public abstract class Redeployer {
    * 
    * @param wdir The context of the monitored root directory
    */
-  protected void onGraceEvent(final WatchDirContext wdir) {
-    log.info("Module has changed - redeploying module from directory " + wdir.dir().toString());
-    Set<Deployment> deps = watchedDeployments.get(wdir.dir());
+  protected final void onGraceEvent(final Path dir) {
+    log.info("Module has changed - redeploying module from directory " + dir.toString());
+    Set<Deployment> deps = watchedDeployments.get(dir);
     if (deps != null) {
     	reloader.reloadModules(deps);
     } else {
-      log.info("Bug??? No Deployment was previously registered with this directory: " + wdir.dir());
+      log.info("Bug??? No Deployment was previously registered with this directory: " + dir);
     }
   }
 
   /**
    * Assign the context if needed. Else make sure we are in the right context (same thread).
    */
-  protected void checkContext() {
+  protected final void checkContext() {
     if (ctx == null) {
       ctx = vertx.getContext();
     } else {

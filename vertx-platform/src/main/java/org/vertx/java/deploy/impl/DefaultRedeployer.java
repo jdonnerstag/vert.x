@@ -128,7 +128,7 @@ public class DefaultRedeployer extends Redeployer {
       watchService.register(modDir, true, new ChangeListener() {
 				@Override
 				public void onGraceEvent(final WatchDirContext wdir) {
-					DefaultRedeployer.this.onGraceEvent(wdir);
+					DefaultRedeployer.this.onGraceEvent(wdir.dir());
 				}
 			});
     } catch (ClosedWatchServiceException ex) {

@@ -6,10 +6,7 @@ import java.io.IOException;
 import java.nio.file.ClosedWatchServiceException;
 import java.nio.file.Path;
 import java.nio.file.WatchEvent;
-import java.nio.file.WatchEvent.Kind;
 import java.nio.file.WatchService;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.After;
@@ -22,16 +19,26 @@ import org.vertx.java.core.file.impl.ChangeListener;
 import org.vertx.java.core.file.impl.FolderWatcher;
 import org.vertx.java.core.file.impl.FolderWatcher.WatchDirContext;
 import org.vertx.java.core.impl.DefaultVertx;
+import org.vertx.java.core.logging.Logger;
+import org.vertx.java.core.logging.impl.LoggerFactory;
 import org.vertx.java.framework.TestUtils;
 
 import static org.junit.Assert.*;
 
 /**
- *
+ * When you test java's WatchService than bear in mind that the implementation is OS and FileSystem
+ * dependent. Windows/NTFS behaves different compared to Linux/extfs or NFS or ..<p>
+ * FolderWatcher actually helps to alleviate that a bit because it generates onDirectoryChange()
+ * events even if the actual WatchService implementation does not.<p>
+ * E.g. some fire a create <b>and</b> modify event on file creation. Some fire a create event for
+ * a new file but no modify for the directory.<p>
+ * As a conclusion for testing FolderWatcher: you should not assert the number of low level events
  */
 public class FolderWatcherTest {
 
-	private static DefaultVertx vertx;
+  private static final Logger log = LoggerFactory.getLogger(FolderWatcherTest.class);
+
+  private static DefaultVertx vertx;
   private File modRoot;
   private WatchService watchService;
   
@@ -140,9 +147,8 @@ public class FolderWatcherTest {
     Thread.sleep(100);
     w.clearAndProcessEvents();
     
-    // 2 x create and 2 x modify per file
-    assertEquals(2, w.res.size());
-    assertEquals(4, w.countEvents.get());
+    // 2 x modify per file
+    assertTrue(w.countEvents.get() >= 2);
     assertEquals(1, w.countDir.get());
     assertEquals(0, w.countGrace.get());
     
@@ -152,7 +158,6 @@ public class FolderWatcherTest {
     // Nothing should happen yet
     w.clearAndProcessEvents();
     
-    assertEquals(0, w.res.size());
     assertEquals(0, w.countEvents.get());
     assertEquals(0, w.countDir.get());
     assertEquals(0, w.countGrace.get());
@@ -163,7 +168,6 @@ public class FolderWatcherTest {
     // process again and we should see a grace event
     w.clearAndProcessEvents();
     
-    assertEquals(0, w.res.size());
     assertEquals(0, w.countEvents.get());
     assertEquals(0, w.countDir.get());
     assertEquals(1, w.countGrace.get());
@@ -174,7 +178,6 @@ public class FolderWatcherTest {
 	@Test
   public void testCreate2FilesNonRecursiveAndListener() throws Exception {
 		// Some "collectors" to collect the results
-		final Map<Path, Kind<?>> res = new HashMap<>();
 		final AtomicInteger countEvents = new AtomicInteger();
 		final AtomicInteger countDir = new AtomicInteger();
 		final AtomicInteger countGrace = new AtomicInteger();
@@ -182,12 +185,12 @@ public class FolderWatcherTest {
 		MockedFolderWatcher w = newMockedFolderWatcher();
     String modName = "my-mod";
     File modDir = createDirectory(modRoot, modName);
+    // The listener replaces the derived one.
     w.register(modDir.toPath(), false, new ChangeListener() {
 
 			@Override
 			public void onEvent(WatchEvent<Path> event, WatchDirContext wdir) {
 				countEvents.incrementAndGet();
-				res.put(event.context(), event.kind());
 			}
 
 			@Override
@@ -199,7 +202,6 @@ public class FolderWatcherTest {
 			public void onGraceEvent(WatchDirContext wdir) {
 				countGrace.incrementAndGet();
 			}
-			
 		});
 
     // Create 2 files in the same directory
@@ -212,17 +214,16 @@ public class FolderWatcherTest {
     
     // subclass handlers are not invoked if a listener is registered
     // 2 x create and 2 x modify for both files
-    assertEquals(2, res.size());
-    assertEquals(4, countEvents.get());
+    assertTrue(countEvents.get() >= 2);
     assertEquals(1, countDir.get());
     assertEquals(0, countGrace.get());
-    assertEquals(0, w.res.size());
+    
+    // The FolderWatchers event handler should have not been called => 0
     assertEquals(0, w.countEvents.get());
     assertEquals(0, w.countDir.get());
     assertEquals(0, w.countGrace.get());
     
     // Clean up the collectors
-    res.clear();
     countEvents.set(0);
     countDir.set(0);
     countGrace.set(0);
@@ -234,11 +235,9 @@ public class FolderWatcherTest {
     Thread.sleep(100);
     w.clearAndProcessEvents();
     
-    assertEquals(0, res.size());
     assertEquals(0, countEvents.get());
     assertEquals(0, countDir.get());
     assertEquals(0, countGrace.get());
-    assertEquals(0, w.res.size());
     assertEquals(0, w.countEvents.get());
     assertEquals(0, w.countDir.get());
     assertEquals(0, w.countGrace.get());
@@ -250,11 +249,9 @@ public class FolderWatcherTest {
     Thread.sleep(100);
     w.clearAndProcessEvents();
     
-    assertEquals(0, res.size());
     assertEquals(0, countEvents.get());
     assertEquals(0, countDir.get());
     assertEquals(1, countGrace.get());
-    assertEquals(0, w.res.size());
     assertEquals(0, w.countEvents.get());
     assertEquals(0, w.countDir.get());
     assertEquals(0, w.countGrace.get());
@@ -275,9 +272,8 @@ public class FolderWatcherTest {
     Thread.sleep(100);
     w.clearAndProcessEvents();
     
-    // What we expect: 1 x create and 1 x modify for the same file
-    assertEquals(1, w.res.size());
-    assertEquals(2, w.countEvents.get());
+    // What we expect: 1 x create file
+    assertTrue(w.countEvents.get() >= 1);
     assertEquals(1, w.countDir.get());
     assertEquals(0, w.countGrace.get());
     
@@ -288,7 +284,6 @@ public class FolderWatcherTest {
     Thread.sleep(100);
     w.clearAndProcessEvents();
     
-    assertEquals(0, w.res.size());
     assertEquals(0, w.countEvents.get());
     assertEquals(0, w.countDir.get());
     assertEquals(0, w.countGrace.get());
@@ -300,7 +295,6 @@ public class FolderWatcherTest {
     Thread.sleep(100);
     w.clearAndProcessEvents();
     
-    assertEquals(0, w.res.size());
     assertEquals(0, w.countEvents.get());
     assertEquals(0, w.countDir.get());
     assertEquals(1, w.countGrace.get());
@@ -321,9 +315,8 @@ public class FolderWatcherTest {
     Thread.sleep(100);
     w.clearAndProcessEvents();
     
-    // What we expect: 1 x create and 1 x modify for the same file
-    assertEquals(1, w.res.size());
-    assertEquals(2, w.countEvents.get());
+    // What we expect: 1 x modify file
+    assertTrue(w.countEvents.get() >= 1);
     assertEquals(1, w.countDir.get());
     assertEquals(0, w.countGrace.get());
     
@@ -334,7 +327,6 @@ public class FolderWatcherTest {
     Thread.sleep(100);
     w.clearAndProcessEvents();
     
-    assertEquals(0, w.res.size());
     assertEquals(0, w.countEvents.get());
     assertEquals(0, w.countDir.get());
     assertEquals(0, w.countGrace.get());
@@ -346,7 +338,6 @@ public class FolderWatcherTest {
     Thread.sleep(100);
     w.clearAndProcessEvents();
     
-    assertEquals(0, w.res.size());
     assertEquals(0, w.countEvents.get());
     assertEquals(0, w.countDir.get());
     assertEquals(1, w.countGrace.get());
@@ -362,15 +353,15 @@ public class FolderWatcherTest {
     createFile(modDir, "foo.js");
     
     w.register(modDir.toPath(), false);
+    Thread.sleep(100);
     deleteFile(modDir, "foo.js");
     
     // process the watchservice events
     Thread.sleep(100);
     w.clearAndProcessEvents();
     
-    // What we expect: 1 x modify and 1 x delete
-    assertEquals(1, w.res.size());
-    assertEquals(2, w.countEvents.get());
+    // What we expect: 1 x delete
+    assertTrue(w.countEvents.get() >= 1);
     assertEquals(1, w.countDir.get());
     assertEquals(0, w.countGrace.get());
     
@@ -381,7 +372,6 @@ public class FolderWatcherTest {
     Thread.sleep(100);
     w.clearAndProcessEvents();
     
-    assertEquals(0, w.res.size());
     assertEquals(0, w.countEvents.get());
     assertEquals(0, w.countDir.get());
     assertEquals(0, w.countGrace.get());
@@ -393,7 +383,6 @@ public class FolderWatcherTest {
     Thread.sleep(100);
     w.clearAndProcessEvents();
     
-    assertEquals(0, w.res.size());
     assertEquals(0, w.countEvents.get());
     assertEquals(0, w.countDir.get());
     assertEquals(1, w.countGrace.get());
@@ -414,8 +403,7 @@ public class FolderWatcherTest {
     Thread.sleep(100);
     w.clearAndProcessEvents();
     
-    // What we expect: 1 x create the directory. The parent is not monitored, hence no event.
-    assertEquals(1, w.res.size());
+    // What we expect: 1 x create directory. The parent is not monitored, hence no event.
     assertEquals(1, w.countEvents.get());
     assertEquals(1, w.countDir.get());
     assertEquals(0, w.countGrace.get());
@@ -426,7 +414,6 @@ public class FolderWatcherTest {
     // Nothing should have happened yet
     w.clearAndProcessEvents();
     
-    assertEquals(0, w.res.size());
     assertEquals(0, w.countEvents.get());
     assertEquals(0, w.countDir.get());
     assertEquals(0, w.countGrace.get());
@@ -437,7 +424,6 @@ public class FolderWatcherTest {
     // process again and we should see a grace event
     w.clearAndProcessEvents();
     
-    assertEquals(0, w.res.size());
     assertEquals(0, w.countEvents.get());
     assertEquals(0, w.countDir.get());
     assertEquals(1, w.countGrace.get());
@@ -450,25 +436,26 @@ public class FolderWatcherTest {
 		MockedFolderWatcher w = newMockedFolderWatcher();
     String modName = "my-mod";
     File modDir = createDirectory(modRoot, modName);
+    Thread.sleep(100);
+    
     w.register(modDir.toPath(), true);
+    Thread.sleep(100);
 
     File subdir = createDirectory(modDir, "test-1");
-    Thread.sleep(200);
-    
-    // make sure the subdir gets registered
-    w.clearAndProcessEvents();
+    Thread.sleep(100);
+
+    // Process the events to automatically register the subdir
+    w.processEvents();
     
     createFile(subdir, "foo.js");
-    Thread.sleep(200);
+    Thread.sleep(100);
     
     // process the watchservice events (but don't clear the counters)
     w.processEvents();
     
     // What we expect: the dirs create and modify events
-    assertEquals(2, w.res.size());
-    assertEquals(4, w.countEvents.get());
-    // It's 3 and not 2 because processEvents() is called twice
-    assertEquals(3, w.countDir.get());
+    assertTrue(w.countEvents.get() >= 2);
+    assertEquals(2, w.countDir.get());
     assertEquals(0, w.countGrace.get());
 
     // move/set the time to be greater or equal the grace period
@@ -477,7 +464,6 @@ public class FolderWatcherTest {
     // process again and we should see a grace event
     w.clearAndProcessEvents();
     
-    assertEquals(0, w.res.size());
     assertEquals(0, w.countEvents.get());
     assertEquals(0, w.countDir.get());
     assertEquals(1, w.countGrace.get());
@@ -505,7 +491,10 @@ public class FolderWatcherTest {
     Thread.sleep(100);
 
     // process the events (we need the timestamp to calculate the delay later on)
-    w.clearAndProcessEvents();
+    w.processEvents();
+    assertTrue(w.countEvents.get() >= 2);
+    assertEquals(1, w.countDir.get());
+    assertEquals(0, w.countGrace.get());
 
     // move/set the time to be greater or equal the grace period
     w.millis = FolderWatcher.GRACE_PERIOD;
@@ -605,6 +594,7 @@ public class FolderWatcherTest {
   	String content = TestUtils.randomAlphaString(1000);
   	File f = new File(dir, fileName);
     vertx.fileSystem().writeFileSync(f.getAbsolutePath(), new Buffer(content));
+  	log.error("Create File: " + f.getAbsolutePath() + " " + f.lastModified());
   }
 
   private void modifyFile(File dir, String fileName) throws Exception {
@@ -612,10 +602,12 @@ public class FolderWatcherTest {
     FileWriter fw = new FileWriter(f, true);
     fw.write(TestUtils.randomAlphaString(500));
     fw.close();
+  	log.error("Modify File: " + f.getAbsolutePath() + " " + f.lastModified());
   }
 
   private void deleteFile(File dir, String fileName) throws Exception {
     File f = new File(dir, fileName);
+  	log.error("Delete File: " + f.getAbsolutePath());
     f.delete();
   }
 
@@ -626,13 +618,13 @@ public class FolderWatcherTest {
     		throw new RuntimeException("Unable to create directory");
     	}
     }
+  	log.error("Create Directory: " + f.getAbsolutePath() + " " + f.lastModified());
     return f;
   }
 
 	public class MockedFolderWatcher extends FolderWatcher {
 		
 		// Some "collectors" to collect the results
-		final Map<Path, Kind<?>> res = new HashMap<>();
 		final AtomicInteger countEvents = new AtomicInteger();
 		final AtomicInteger countDir = new AtomicInteger();
 		final AtomicInteger countGrace = new AtomicInteger();
@@ -659,22 +651,23 @@ public class FolderWatcherTest {
 		public void onEvent(WatchEvent<Path> event, WatchDirContext wdir) {
 			countEvents.incrementAndGet();
 			Path path = wdir.root().dir().resolve(event.context());
-			res.put(path, event.kind());
+	  	log.error("WatcherEvent: " + path.toAbsolutePath() + " - " + event.kind());
 		}
 
 		@Override
 		public void onDirectoryChanged(WatchDirContext wdir, long currentMillis) {
+	  	log.error("A directory was modified: " + wdir.dir().toAbsolutePath() + " " + wdir.dir().toFile().lastModified());
 			countDir.incrementAndGet();
 		}
 		
 		@Override
 		public void onGraceEvent(WatchDirContext wdir) {
+	  	log.error("Grace Event: " + wdir.dir().toAbsolutePath());
 			countGrace.incrementAndGet();
 		}
 		
 		public boolean clearAndProcessEvents() {
 	    // Clean up the collectors
-	    res.clear();
 	    countEvents.set(0);
 	    countDir.set(0);
 	    countGrace.set(0);

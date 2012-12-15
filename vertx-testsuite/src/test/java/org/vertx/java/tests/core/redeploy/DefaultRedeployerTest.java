@@ -33,8 +33,9 @@ import java.util.concurrent.TimeUnit;
  */
 public class DefaultRedeployerTest {
 
-	private static final Logger log = LoggerFactory.getLogger(DefaultRedeployerTest.class);
-
+  private static final Logger log = LoggerFactory.getLogger(DefaultRedeployerTest.class);
+  private static final int SLEEP = 1000;
+  
   protected static VertxInternal vertx;
   protected TestReloader reloader;
   protected File modRoot;
@@ -93,7 +94,7 @@ public class DefaultRedeployerTest {
     createFile(modDir, "foo.js", TestUtils.randomAlphaString(1000));
     Deployment dep = createDeployment("dep1", "my-mod", null);
     red.moduleDeployed(dep);
-    Thread.sleep(500);
+    Thread.sleep(SLEEP);
     createFile(modDir, "blah.txt", TestUtils.randomAlphaString(1000));
     waitReload(dep);
   }
@@ -105,7 +106,7 @@ public class DefaultRedeployerTest {
     createFile(modDir, "foo.js", TestUtils.randomAlphaString(1000));
     Deployment dep = createDeployment("dep1", "my-mod", null);
     red.moduleDeployed(dep);
-    Thread.sleep(500);
+    Thread.sleep(SLEEP);
     modifyFile(modDir, "blah.txt");
     waitReload(dep);
   }
@@ -118,7 +119,7 @@ public class DefaultRedeployerTest {
     createFile(modDir, "blah.txt", TestUtils.randomAlphaString(1000));
     Deployment dep = createDeployment("dep1", "my-mod", null);
     red.moduleDeployed(dep);
-    Thread.sleep(500);
+    Thread.sleep(SLEEP);
     deleteFile(modDir, "blah.txt");
     waitReload(dep);
   }
@@ -130,7 +131,7 @@ public class DefaultRedeployerTest {
     createFile(modDir, "foo.js", TestUtils.randomAlphaString(1000));
     Deployment dep = createDeployment("dep1", "my-mod", null);
     red.moduleDeployed(dep);
-    Thread.sleep(500);
+    Thread.sleep(SLEEP);
     createDirectory(modDir, "some-dir");
     waitReload(dep);
   }
@@ -143,7 +144,7 @@ public class DefaultRedeployerTest {
     createDirectory(modDir, "some-dir");
     Deployment dep = createDeployment("dep1", "my-mod", null);
     red.moduleDeployed(dep);
-    Thread.sleep(500);
+    Thread.sleep(SLEEP);
     File subDir = new File(modDir, "some-dir");
     createFile(subDir, "bar.txt", TestUtils.randomAlphaString(1000));
     waitReload(dep);
@@ -159,8 +160,8 @@ public class DefaultRedeployerTest {
     createFile(subDir, "bar.txt", TestUtils.randomAlphaString(1000));
     Deployment dep = createDeployment("dep1", "my-mod", null);
     red.moduleDeployed(dep);
-    Thread.sleep(3000);
-  	log.error("delete the file");
+    Thread.sleep(SLEEP);
+  	log.error("delete the file 'bar.txt'");
     deleteFile(subDir, "bar.txt");
     waitReload(dep);
   }
@@ -175,7 +176,7 @@ public class DefaultRedeployerTest {
     createFile(subDir, "bar.txt", TestUtils.randomAlphaString(1000));
     Deployment dep = createDeployment("dep1", "my-mod", null);
     red.moduleDeployed(dep);
-    Thread.sleep(500);
+    Thread.sleep(SLEEP);
     modifyFile(subDir, "bar.txt");
     waitReload(dep);
   }
@@ -190,7 +191,7 @@ public class DefaultRedeployerTest {
     createFile(subDir, "bar.txt", TestUtils.randomAlphaString(1000));
     Deployment dep = createDeployment("dep1", "my-mod", null);
     red.moduleDeployed(dep);
-    Thread.sleep(500);
+    Thread.sleep(SLEEP);
     vertx.fileSystem().deleteSync(subDir.getAbsolutePath(), true);
     waitReload(dep);
   }
@@ -207,7 +208,7 @@ public class DefaultRedeployerTest {
     red.moduleDeployed(dep2);
     Deployment dep3 = createDeployment("dep3", "other-mod", null);
     red.moduleDeployed(dep3);
-    Thread.sleep(500);
+    Thread.sleep(SLEEP);
     createFile(modDir, "blah.txt", TestUtils.randomAlphaString(1000));
     waitReload(dep1, dep2);
   }

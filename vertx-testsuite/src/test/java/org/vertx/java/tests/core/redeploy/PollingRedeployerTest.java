@@ -1,7 +1,5 @@
 package org.vertx.java.tests.core.redeploy;
 
-import org.junit.Test;
-
 import org.vertx.java.core.impl.VertxInternal;
 import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
@@ -22,11 +20,5 @@ public class PollingRedeployerTest extends DefaultRedeployerTest {
   @Override
   protected Redeployer newRedeployer(final VertxInternal vertx, final File modRoot, final ModuleReloader reloader) {
   	return new PollingRedeployer(vertx, modRoot, reloader);
-  }
-
-  @Test
-  public void testDeleteFileInSubDirectory() throws Exception {
-  	// This test fails on my windows box. some-dir's lastModifyTime doesn't get updated
-  	// even though the file was deleted.
   }
 }

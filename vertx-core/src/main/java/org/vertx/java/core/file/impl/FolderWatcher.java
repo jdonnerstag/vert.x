@@ -366,8 +366,13 @@ public class FolderWatcher {
       // Either invoke a user provided listener or a local handler (optionally 
       // provided / extended via subclassing)
      	_onEvent(ev, wdir);
-     	
-     	rtn = true;
+
+     	if ((event.kind() == StandardWatchEventKinds.ENTRY_MODIFY) && 
+     			wdir.resolve(ev).toFile().isDirectory()) {
+     		// nothing
+     	} else {
+       	rtn = true;
+     	}
     } 
 
     // reset the key and remove from set if directory is no longer accessible

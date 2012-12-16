@@ -100,7 +100,7 @@ public abstract class Redeployer {
    * 
    * @param deployment
    */
-  public final void moduleDeployed(final Deployment deployment) {
+  public void moduleDeployed(final Deployment deployment) {
   	Args.notNull(deployment, "deployment");
   	if (!closed) {
   		toDeploy.add(deployment);
@@ -114,7 +114,7 @@ public abstract class Redeployer {
    * 
    * @param deployment
    */
-  public final void moduleUndeployed(final Deployment deployment) {
+  public void moduleUndeployed(final Deployment deployment) {
   	Args.notNull(deployment, "deployment");
   	if (!closed) {
       toUndeploy.add(deployment);
@@ -136,7 +136,6 @@ public abstract class Redeployer {
     		continue;
     	}
 
-    	// @TODO how can there be more than 1 deployment in a subdir? What exactly the relationship between Deployment and Module?
       Set<Deployment> deps = watchedDeployments.get(modDir);
       if (deps == null) {
         deps = new HashSet<>();
@@ -191,6 +190,27 @@ public abstract class Redeployer {
     } else {
       log.info("Bug??? No Deployment was previously registered with this directory: " + dir);
     }
+  }
+
+  /**
+   * Little helper. Get a Long system property 
+   * 
+   * @param name
+   * @param defValue
+   * @return
+   */
+  protected long getProperty(final String name, final long defValue) {
+  	String val = System.getProperty(this.getClass().getSimpleName() + name);
+  	if (val == null) {
+  		return defValue;
+  	}
+  	try {
+  		return Long.parseLong(val);
+  	} catch (NumberFormatException ex) {
+  		log.error("Invalid property value format. Property: " + name + "; Value: " + val + 
+  				". Must be a number. Using default: " + defValue);
+  	}
+		return defValue;
   }
 
   /**

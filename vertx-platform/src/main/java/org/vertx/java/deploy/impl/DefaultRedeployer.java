@@ -40,7 +40,7 @@ public class DefaultRedeployer extends Redeployer {
   private static final Logger log = LoggerFactory.getLogger(DefaultRedeployer.class);
 
   // Periodic timer: process the file system events
-  private static final long CHECK_PERIOD = 200;
+  private final long checkMillis;
 
   // Periodic timer: every CHECK_PERIOD
   private final long timerID;
@@ -56,8 +56,22 @@ public class DefaultRedeployer extends Redeployer {
    * @param reloader
    */
   public DefaultRedeployer(final VertxInternal vertx, final File modRoot, final ModuleReloader reloader) {
+  	this(vertx, modRoot, reloader, 200);
+  }
+  
+  /**
+   * Constructor
+   * 
+   * @param vertx
+   * @param modRoot
+   * @param reloader
+   */
+  public DefaultRedeployer(final VertxInternal vertx, final File modRoot, final ModuleReloader reloader, final long checkMillis) {
   	super(vertx, modRoot, reloader);
 
+  	// E.g. -DDefaultRedeployer.checkMillis=500
+  	this.checkMillis = getProperty(".checkMillis", checkMillis);
+  	
     // Get and start the watch service
     watchService = newFolderWatcher();
     if (watchService == null) {
@@ -65,7 +79,7 @@ public class DefaultRedeployer extends Redeployer {
     }
     
     // Start a new periodic timer to regularly process the watcher events
-    timerID = vertx.setPeriodic(CHECK_PERIOD, new Handler<Long>() {
+    timerID = vertx.setPeriodic(this.checkMillis, new Handler<Long>() {
       public void handle(Long id) {
       	// Timer shutdown is asynchronous and might not have completed yet.
       	if (closed()) {
@@ -86,7 +100,7 @@ public class DefaultRedeployer extends Redeployer {
       }
     });
   }
-
+  
   /**
    * @return By default, the vertx provided folder watcher gets used.
    */

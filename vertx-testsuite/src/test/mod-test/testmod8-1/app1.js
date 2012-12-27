@@ -14,26 +14,23 @@
  * limitations under the License.
  */
 
-package org.vertx.java.deploy;
+load('test_utils.js')
+load('vertx.js')
 
-import java.io.File;
+var tu = new TestUtils();
 
-import org.vertx.java.core.AsyncResultHandler;
-import org.vertx.java.core.impl.ActionFuture;
-
-/**
- * Interface for module repository implementations
- * 
- * @author Juergen Donnerstag
- */
-public interface ModuleRepository {
-
-	/**
-	 * Install a module from a remote (http) repository.
-	 * 
-	 * @param moduleName Module name
-	 * @param modRoot Where to install the module
-	 * @param doneHandler
-	 */
-	ActionFuture<Void> installMod(String moduleName, File modRoot, AsyncResultHandler<Void> doneHandler);
+function testMultipleIncludesJar() {
+  tu.azzert("armadillos" ===  org.wibble.Foo.eek());
+  tu.azzert("echidnas" ===  org.wibble.Bar.eek());
+  tu.azzert("ocelot" ===  org.wibble.Quux.eek());
+  tu.testComplete();
 }
+
+tu.registerTests(this);
+tu.appReady();
+
+function vertxStop() {
+  tu.unregisterAll();
+  tu.appStopped();
+}
+

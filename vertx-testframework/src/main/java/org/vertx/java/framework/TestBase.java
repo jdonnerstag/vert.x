@@ -47,7 +47,7 @@ public class TestBase extends TestCase {
 
   // A single Vertx and VerticleManager for <b>ALL</b> tests
   protected static VertxInternal vertx = new DefaultVertx();
-  private static VerticleManager verticleManager = new VerticleManager(vertx);
+  protected static VerticleManager verticleManager = new VerticleManager(vertx);
 
   private BlockingQueue<JsonObject> events = new LinkedBlockingQueue<>();
   private TestUtils tu = new TestUtils(vertx);
@@ -237,9 +237,9 @@ public class TestBase extends TestCase {
       }
     };
 
-    verticleManager.moduleManager().deployMod(modName, config, instances, null, doneHandler);
+    verticleManager.deployMod(modName, config, instances, null, doneHandler);
 
-    if (!doneLatch.await(10, TimeUnit.SECONDS)) {
+    if (!doneLatch.await(30, TimeUnit.SECONDS)) {
       throw new IllegalStateException("Timedout waiting for apps to start");
     }
 

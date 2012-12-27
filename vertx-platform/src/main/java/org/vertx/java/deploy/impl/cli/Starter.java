@@ -26,6 +26,7 @@ import org.vertx.java.core.json.JsonObject;
 import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
 import org.vertx.java.deploy.impl.CommandLineArgs;
+import org.vertx.java.deploy.impl.DefaultModuleRepository;
 import org.vertx.java.deploy.impl.VerticleManager;
 
 import java.io.File;
@@ -52,7 +53,7 @@ public class Starter {
   }
 
   private VertxInternal vertx = new DefaultVertx();
-  private VerticleManager mgr;
+  private VerticleManager verticleManager;
 
   private Starter(String[] sargs) {
     if (sargs.length < 1) {
@@ -93,11 +94,13 @@ public class Starter {
 
   private void installModule(String modName, CommandLineArgs args) {
     String repo = args.map.get("-repo");
-    new VerticleManager(vertx, repo).moduleManager().installMod(modName);
+    VerticleManager verticleManager = new VerticleManager(vertx, null, 
+    		new DefaultModuleRepository(vertx, repo));
+    verticleManager.moduleManager().installOne(modName);
   }
 
   private void uninstallModule(String modName) {
-    new VerticleManager(vertx).moduleManager().uninstallMod(modName);
+    new VerticleManager(vertx).moduleManager().uninstall(modName);
   }
 
   private void runVerticle(boolean module, String main, CommandLineArgs args) {
@@ -120,8 +123,10 @@ public class Starter {
       }
       vertx = new DefaultVertx(clusterPort, clusterHost);
     }
+    
     String repo = args.map.get("-repo");
-    mgr = new VerticleManager(vertx, repo);
+    verticleManager = new VerticleManager(vertx, null, 
+    		new DefaultModuleRepository(vertx, repo));
 
     boolean worker = args.map.get("-worker") != null;
 
@@ -189,19 +194,19 @@ public class Starter {
       public void handle(String id) {
         if (id == null) {
           // Failed to deploy
-          mgr.unblock();
+          verticleManager.unblock();
         }
       }
     };
     if (module) {
-      mgr.moduleManager().deployMod(main, conf, instances, null, doneHandler);
+      verticleManager.deployMod(main, conf, instances, null, doneHandler);
     } else {
       String includes = args.map.get("-includes");
-      mgr.deployVerticle(worker, main, conf, urls, instances, null, includes, doneHandler);
+      verticleManager.deployVerticle(worker, main, conf, urls, instances, null, includes, doneHandler);
     }
 
     addShutdownHook();
-    mgr.block();
+    verticleManager.block();
   }
 
 
@@ -209,7 +214,7 @@ public class Starter {
     Runtime.getRuntime().addShutdownHook(new Thread() {
       public void run() {
         final VertxCountDownLatch latch = new VertxCountDownLatch(1);
-        mgr.undeployAll(new SimpleHandler() {
+        verticleManager.undeployAll(new SimpleHandler() {
           public void handle() {
             latch.countDown();
           }

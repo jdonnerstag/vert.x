@@ -32,19 +32,36 @@ import org.vertx.java.core.utils.lang.Args;
  */
 public class ModuleConfig {
 
-	private static final String CONFIG_FILENAME = "mod.json";
+	public static final String CONFIG_FILENAME = "mod.json";
 	private static final String CONFIG_MAIN = "main";
 	private static final String CONFIG_INCLUDES = "includes";
 	private static final String CONFIG_AUTO_REDEPLOY = "auto-redeploy";
 	private static final String CONFIG_PRESERVE_CWD = "preserve-cwd";
 	private static final String CONFIG_WORKER = "worker";
 
-	public static boolean exists(final File modDir) {
-		return new File(modDir, CONFIG_FILENAME).canRead();
+	private final JsonObject config;
+	private final File modDir;
+
+	public static final boolean exists(final File modDir, final String modName) {
+		return exists(modDir, modName, CONFIG_FILENAME);
 	}
 
-	private final JsonObject config;
+	public static final boolean exists(final File modDir, final String modName, final String configFile) {
+		return getFile(modDir, modName, configFile).canRead();
+	}
 
+	public static final File getFile(final File modDir, final String modName) {
+		return getFile(modDir, modName, CONFIG_FILENAME);
+	}
+	
+	public static final File getFile(final File modDir, final String modName, final String configFile) {
+		Args.notNull(modDir, "modDir");
+		Args.notNull(modName, "modName");
+		Args.notNull(configFile, "configFile");
+		
+		return new File(modDir, modName + "/" + configFile);
+	}
+	
 	/**
 	 * Constructor
 	 * 
@@ -52,6 +69,7 @@ public class ModuleConfig {
 	 */
 	public ModuleConfig(final JsonObject config) {
 		this.config = Args.notNull(config, "config");
+		this.modDir = null;
 	}
 
 	/**
@@ -62,12 +80,13 @@ public class ModuleConfig {
 	 * @param modDir
 	 * @return
 	 */
-	public ModuleConfig(final File modDir, final String modName) {
+	public ModuleConfig(final File modDir, final String modName) throws Exception {
+		this.modDir = new File(Args.notNull(modDir, "modDir"), modName);
 		try {
-			config = new JsonObject(new File(modDir, CONFIG_FILENAME));
+			config = new JsonObject(new File(this.modDir, CONFIG_FILENAME));
 		} catch (Exception ex) {
-			throw new RuntimeException("Failed to load config for module: " + modName + "; dir: " + modDir.getAbsolutePath(),
-					ex);
+			throw new RuntimeException("Failed to load config for module '" + modName + 
+					"' from " + modDir.getAbsolutePath(), ex);
 		}
 	}
 
@@ -75,6 +94,10 @@ public class ModuleConfig {
 		return config;
 	}
 
+	public final File modDir() {
+		return modDir;
+	}
+	
 	public final String main() {
 		return config.getString(CONFIG_MAIN);
 	}

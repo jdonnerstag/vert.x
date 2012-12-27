@@ -20,20 +20,13 @@ import java.io.File;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import org.vertx.java.core.AsyncResult;
-import org.vertx.java.core.Handler;
 import org.vertx.java.core.impl.ActionFuture;
-import org.vertx.java.core.impl.BlockingAction;
-import org.vertx.java.core.impl.Context;
 import org.vertx.java.core.impl.VertxInternal;
-import org.vertx.java.core.impl.VertxThreadFactory;
-import org.vertx.java.core.json.JsonObject;
 import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
 import org.vertx.java.core.utils.lang.Args;
@@ -41,8 +34,8 @@ import org.vertx.java.deploy.ModuleRepository;
 
 /**
  * The Module manager attempts to downloads missing Modules from registered 
- * Repositories. Each Module gets installed in its own subdirectory of modRoot.
- * and must contain a file called 'mod.json', which is the module config file.
+ * Repositories. Each Module gets installed in its own subdirectory
+ * and must contain a file called 'mod.json', which is the module's config file.
  * Besides a few other attributes, it also defines dependencies on other modules
  * ('includes'). The Module manager make sure that all dependencies are resolved.
  * 
@@ -53,85 +46,83 @@ public class ModuleManager {
 
 	private static final Logger log = LoggerFactory.getLogger(ModuleManager.class);
 
-	private static final String MODULE_ROOT_DIR_PROPERTY_NAME = "vertx.mods";
+	public static final String MODULE_ROOT_DIR_PROPERTY_NAME = "vertx.mods";
 	private static final String DEFAULT_MODULE_ROOT_DIR = "mods";
 	private static final String LIB_DIR = "lib";
 
-	private final VertxInternal vertx;
 	private final VerticleManager verticleManager;
 	private List<ModuleRepository> moduleRepositories = new ArrayList<>();
 
-	// The root directory where we expect to find the modules, resp. where
-	// downloaded modules will be deployed
+	// The directory where modules will be downloaded to
 	private final File modRoot;
 
 	/**
 	 * Constructor
 	 * 
-	 * @param vertx
-	 *          Must be != null
-	 * @param repository
-	 *          Defaults to DEFAULT_REPO_HOST
 	 * @param modRoot
 	 *          The directory path where all the modules are deployed already or
 	 *          will be installed after download from a repository.
+	 * @param repository
+	 *          Defaults to DEFAULT_REPO_HOST
 	 */
-	public ModuleManager(final VertxInternal vertx, final VerticleManager verticleManager, final String repository,
-			final String modRoot, final ModuleRepository... moduleRepositories) {
-
-		this.vertx = Args.notNull(vertx, "vertx");
+	public ModuleManager(final VerticleManager verticleManager, final File modRoot, ModuleRepository... repos) {
 		this.verticleManager = Args.notNull(verticleManager, "verticleManager");
 		this.modRoot = initModRoot(modRoot);
 
-		initRepositories(repository, moduleRepositories);
+		initRepositories(repos);
 	}
 
+	public final VertxInternal vertx() {
+		return this.verticleManager.vertx();
+	}
+	
 	/**
 	 * Initialize modRoot
 	 * 
 	 * @param modRoot
 	 * @return
 	 */
-	private File initModRoot(final String modRoot) {
+	private File initModRoot(File modRoot) {
 		// TODO use VertxConfig once applied
-		String modDir = modRoot != null ? modRoot : System.getProperty(MODULE_ROOT_DIR_PROPERTY_NAME);
-		if (modDir == null || modDir.trim().isEmpty()) {
-			modDir = DEFAULT_MODULE_ROOT_DIR;
-		}
-		
-		File f = new File(modDir);
-		if (f.exists() == false) {
-			log.info("Module root directory does not exist => create it: " + f.getAbsolutePath());
-			if (f.mkdir() == false) {
-				throw new IllegalArgumentException("Unable to create directory: " + f.getAbsolutePath());
+		if (modRoot == null) {
+			String modDir = System.getProperty(MODULE_ROOT_DIR_PROPERTY_NAME);
+			if (modDir == null || modDir.trim().isEmpty()) {
+				modDir = DEFAULT_MODULE_ROOT_DIR;
 			}
-		} else if (f.isDirectory() == false) {
-			throw new IllegalArgumentException("Module root directory exists, but is not a directory: " + f.getAbsolutePath());
+			modRoot = new File(modDir);
 		}
 		
-		return f;
+		if (modRoot.exists() == false) {
+			log.info("Module root directory does not exist => create it: " + modRoot.getAbsolutePath());
+			if (modRoot.mkdir() == false) {
+				throw new IllegalArgumentException("Unable to create directory: " + modRoot.getAbsolutePath());
+			}
+		} else if (modRoot.isDirectory() == false) {
+			throw new IllegalArgumentException("Module root directory exists, but is not a directory: " + 
+					modRoot.getAbsolutePath());
+		}
+		
+		return modRoot;
 	}
 
 	/**
-	 * Initialize the list of repositories
+	 * Initialize the list of repositories. 
 	 * 
 	 * @param repository
 	 * @param moduleRepositories
 	 */
-	private void initRepositories(final String repository, final ModuleRepository... moduleRepositories) {
-		for (ModuleRepository repo: moduleRepositories) {
-			if (repo != null) {
-				this.moduleRepositories.add(repo);
-			}
+	private void initRepositories(final ModuleRepository... repos) {
+		for (ModuleRepository repo: repos) {
+			moduleRepositories().add(repo);
 		}
 		
-		if (this.moduleRepositories.size() == 0) {
-			this.moduleRepositories.add(new DefaultModuleRepository(vertx, repository, this.modRoot));
+		if (moduleRepositories().size() == 0) {
+			moduleRepositories().add(new DefaultModuleRepository(vertx(), null));
 		}
 	}
 	
 	/**
-	 * This methods provides full unsynchronized access the list of repositories. You can remove the default
+	 * This methods provides full unsynchronized access to the list of repositories. You can remove the default
 	 * entry, add new repositories, etc.. It's a little bit dangerous because it's unsynchronized. At the same 
 	 * time we don't expect the list to be modified very often. Adding repos right after ModuleManager was 
 	 * created, in the same thread, is absolutely safe and likely the standard use case.
@@ -150,242 +141,240 @@ public class ModuleManager {
 	}
 
 	/**
-	 * Install a module (sync)
+	 * (Sync) Gets the config for the module
 	 * 
-	 * @param moduleName
+	 * @param modName
+	 * @param throwException
+	 * @return
 	 */
-	public AsyncResult<Void> installMod(final String moduleName) {
-		return installMod(moduleName, 30, TimeUnit.SECONDS);
+	public final ModuleConfig modConfig(final String modName, boolean throwException) {
+		Args.notNull(modName, "modName");
+    try {
+	    return new ModuleConfig(modRoot, modName);
+    } catch (Exception ex) {
+    	if (throwException) {
+    		throw new RuntimeException(ex);
+    	} else {
+    		log.error("Failed to load module config: " + modConfigFile(modName));
+    	}
+    }
+    return null;
+	}
+
+	public final String modConfigFile(final String modName) {
+		Args.notNull(modName, "modName");
+		return ModuleConfig.getFile(modRoot, modName).getAbsolutePath();
 	}
 
 	/**
-	 * Install a module (sync)
+	 * (Sync) Install a single module without its dependencies: download from 
+	 * a repository and unzip into modRoot. Existing files will be replaced, extraneous 
+	 * files will not be removed. Uninstall the module, if you want to delete all associated files.
 	 * 
-	 * @param moduleName
+	 * @param modName
 	 */
-	public AsyncResult<Void> installMod(final String moduleName, int timeout, TimeUnit unit) {
+	public AsyncResult<Void> installOne(final String modName) {
+		return installOne(modName, 30, TimeUnit.SECONDS);
+	}
+
+	/**
+	 * (Async) Install a single module without its dependencies: download from 
+	 * a repository and unzip into modRoot. Existing files will be replaced, extraneous 
+	 * files will not be removed. Uninstall the module, if you want to delete all associated files.
+	 * 
+	 * @param modName
+	 */
+	public AsyncResult<Void> installOne(final String modName, int timeout, TimeUnit unit) {
+		Args.notNull(modName, "modName");
+  	log.info("Install module: " + modName);
     AsyncResult<Void> res = null;
   	for (ModuleRepository repo: this.moduleRepositories) {
-  		ActionFuture<Void> f = repo.installMod(moduleName, null);
+  		ActionFuture<Void> f = repo.installMod(modName, this.modRoot, null);
 	    res = f.get(timeout, unit);
 	    if (res == null) {
-	      log.error("Timeout while waiting to download module '" + moduleName + "' from repository: " + repo.toString());
+	      log.error(message("Timeout while waiting to download", modName, repo));
 	    } else if (res.failed()) {
-	    	log.error("Failed to install module '" + moduleName + "' from repository: " + repo.toString());
+	    	log.error(message("Failed to install", modName, repo));
 	    } else {
-	    	log.info("Successfully installed module '" + moduleName + "' from repository: " + repo.toString());
+	    	log.info(message("Successfully installed", modName, repo));
 	    	break;
 	    }
   	}
   	return res;
   }
 
+	private String message(String prefix, String modName, ModuleRepository repo) {
+  	return prefix + " module '" + modName + "' from repository: " + repo.toString();
+	}
+
+  /**
+   * (Sync) Install a module and all its declared dependencies.
+   * 
+   * @param modName
+   * @return
+   */
+  public ModuleDependencies install(final String modName) {
+		Args.notNull(modName, "modName");
+    ModuleDependencies pdata = new ModuleDependencies(modName);
+    
+    if (ModuleConfig.exists(modRoot, modName) == false) {
+      if (installOne(modName).failed()) {
+        return pdata.failed("Failed to install module: " + modName);
+      }
+    } else {
+    	log.info("Module '" + modName + "' is already installed");
+    }
+    
+    ModuleConfig conf = modConfig(modName, false);
+    if (conf == null) {
+    	// Something went wrong
+      return pdata.failed("Failed to load module config: " + modConfigFile(modName));
+    }
+    
+    String main = conf.main();
+    if (main == null) {
+      return pdata.failed("Runnable module " + modName + " mod.json must contain a \"main\" field");
+    }
+
+    return processIncludes(pdata, modName, conf);
+  }
+  
+  /**
+   * We walk through the graph of includes making sure we only add each one once.
+   * We keep track of what jars have been included so we can flag errors if paths
+   * are included more than once.
+   * We make sure we only include each module once in the case of loops in the
+   * graph.
+   */
+  public ModuleDependencies processIncludes(final ModuleDependencies pdata, final String modName, 
+  		final ModuleConfig conf) {
+
+    // Add the urls for this module
+    pdata.urls.add(conf.modDir().toURI());
+    File libDir = new File(conf.modDir(), LIB_DIR);
+    if (libDir.exists()) {
+      File[] jars = libDir.listFiles();
+      for (File jar: jars) {
+        String prevMod = pdata.includedJars.get(jar.getName());
+        if (prevMod != null) {
+          log.warn("Warning! jar file " + jar.getName() + " is contained in module(s) [" +
+                   prevMod + "] and also in module " + modName +
+                   " which are both included (perhaps indirectly) by module " +
+                   pdata.runModule);
+          
+          pdata.includedJars.put(jar.getName(), prevMod + ", " + modName);
+        } else {
+          pdata.includedJars.put(jar.getName(), modName);
+        }
+        pdata.urls.add(jar.toURI());
+      }
+    }
+
+    pdata.includedModules.add(modName);
+
+    List<String> sarr = conf.includes();
+    for (String include: sarr) {
+      if (pdata.includedModules.contains(include)) {
+        // Ignore - already included this one
+      } else {
+     		ModuleConfig newconf = modConfig(include, false);
+     		if (newconf == null) {
+          // Module not installed - let's try to install it
+          if (installOne(include).failed()) {
+            return pdata.failed("Failed to install all dependencies");
+          }
+       		newconf = modConfig(include, false);
+       		if (newconf == null) {
+            return pdata.failed("?? The module config should really be now available");
+       		}
+     		}
+     		
+        if (processIncludes(pdata, include, newconf).failed()) {
+          return pdata;
+        }
+      }
+    }
+
+    return pdata;
+  }
+	
 	/**
-	 * Uninstall a module (sync)
-	 * TODO shouldn't it be async? At least optionally? It is blocking (delete directory)
+	 * (Sync) Uninstall a module (but not its dependencies): delete the directory
 	 * 
-	 * @param moduleName
+	 * @param modName
 	 */
-  public void uninstallMod(final String moduleName) {
-    log.info("Uninstalling module " + moduleName + " from directory " + modRoot.getAbsolutePath());
-    File modDir = new File(modRoot, moduleName);
+  public void uninstall(final String modName) {
+    log.info("Uninstalling module " + modName + " from directory " + modRoot.getAbsolutePath());
+    File modDir = new File(modRoot, modName);
     if (!modDir.exists()) {
       log.error("Cannot find module directory to delete: " + modDir.getAbsolutePath());
     } else {
       try {
-        vertx.fileSystem().deleteSync(modDir.getAbsolutePath(), true);
-        log.info("Module " + moduleName + " successfully uninstalled (directory deleted)");
+        vertx().fileSystem().deleteSync(modDir.getAbsolutePath(), true);
+        log.info("Module " + modName + " successfully uninstalled (directory deleted)");
       } catch (Exception e) {
         log.error("Failed to delete directory: " + modDir.getAbsoluteFile(), e);
       }
     }
   }
-
-	/**
-	 * Deploy a Module (async)
-	 * 
-	 * @param modName
-	 * @param config
-	 * @param instances
-	 * @param currentModDir
-	 * @param doneHandler
-	 * TODO could be improved to return the Future
-	 */
-	public final void deployMod(final String modName, final JsonObject config, final int instances,
-			final File currentModDir, final Handler<String> doneHandler) {
-
-		BlockingAction<Void> deployModuleAction = new BlockingAction<Void>(vertx) {
-      @Override
-      public Void action() throws Exception {
-      	// TODO not sure it is correct to wrap the doneHandler here. 
-        doDeployMod(false, null, modName, config, instances, currentModDir, wrapDoneHandler(doneHandler));
-        return null;
-      }
-    };
-
-    deployModuleAction.run();	
-  }
-
-	/**
-	 * Deploy a Module (sync)
-	 * 
-	 * @param redeploy
-	 * @param depName
-	 * @param modName
-	 * @param config
-	 * @param instances
-	 * @param currentModDir
-	 * @param doneHandler
-	 */
-  public void doDeployMod(final boolean redeploy, final String depName, final String modName,
-  		final JsonObject config, final int instances, final File currentModDir,
-      final Handler<String> doneHandler) {
+  
+  /**
+   * Data only 
+   */
+  public static class ModuleDependencies {
   	
-    checkWorkerContext();
-
-    File modDir = new File(modRoot, modName);
-    ModuleConfig conf = new ModuleConfig(modDir, modName);
-    if (conf.json() != null) {
-      String main = conf.main();
-      if (main == null) {
-        log.error("Runnable module " + modName + " mod.json must contain a \"main\" field");
-        callDoneHandler(doneHandler, null);
-        return;
-      }
-      
-      boolean worker = conf.worker();
-      boolean preserveCwd = conf.preserveCwd();
-      
-      // preserveCwd deploys dependencies in a subdirectory to the module,
-      // thus avoiding issues with incompatible module versions
-      File modDirToUse = preserveCwd ? currentModDir : modDir;
-
-      List<URI> urls = processIncludes(modName, new ArrayList<URI>(), modName, modDir, conf, 
-      		new HashMap<String, String>(), new HashSet<String>());
-      if (urls == null) {
-        callDoneHandler(doneHandler, null);
-        return;
-      }
-
-      boolean autoRedeploy = conf.autoRedeploy();
-      verticleManager.doDeploy(depName, autoRedeploy, worker, main, modName, config, 
-      		urls.toArray(new URI[urls.size()]), instances, modDirToUse, doneHandler);
-    } else {
-    	// Install the module first and then try again
-      if (installMod(modName).succeeded()) {
-        doDeployMod(redeploy, depName, modName, config, instances, currentModDir, doneHandler);
-      } else {
-      	// Failed to install the module
-        callDoneHandler(doneHandler, null);
-      }
-    }
-  }
-
-  /**
-   * We walk through the graph of includes making sure we only add each one once
-   * We keep track of what jars have been included so we can flag errors if paths
-   * are included more than once
-   * We make sure we only include each module once in the case of loops in the
-   * graph
-   */
-  public List<URI> processIncludes(final String runModule, List<URI> urls, final String modName, 
-  		final File modDir, final ModuleConfig conf, final Map<String, String> includedJars, 
-  		final Set<String> includedModules) {
+  	// The root module where the analysis started
+  	final String runModule;
   	
-    checkWorkerContext();
-    // Add the urls for this module
-    urls.add(modDir.toURI());
-    File libDir = new File(modDir, LIB_DIR);
-    if (libDir.exists()) {
-      File[] jars = libDir.listFiles();
-      for (File jar: jars) {
-        URI jarURL = jar.toURI();
-        String sjarURL = jarURL.toString();
-        String jarName = sjarURL.substring(sjarURL.lastIndexOf("/") + 1);
-        String prevMod = includedJars.get(jarName);
-        if (prevMod != null) {
-          log.warn("Warning! jar file " + jarName + " is contained in module " +
-                   prevMod + " and also in module " + modName +
-                   " which are both included (perhaps indirectly) by module " +
-                   runModule);
-        }
-        includedJars.put(jarName, modName);
-        urls.add(jarURL);
-      }
-    }
+  	// The module's classpath: all required module directories and all jars
+  	final List<URI> urls;
+  	
+  	// List of all Jars contributed by all modules from their respective 'lib' directory
+  	// jar -> module(s)
+  	final Map<String, String> includedJars;
 
-    includedModules.add(modName);
+  	// List of all required modules (includes)
+  	final List<String> includedModules;
 
-    List<String> sarr = conf.includes();
-    for (String include: sarr) {
-      if (includedModules.contains(include)) {
-        // Ignore - already included this one
-      } else {
-        File newmodDir = new File(modRoot, include);
-        inner: while (true) {
-          ModuleConfig newconf = new ModuleConfig(newmodDir, include);
-          if (newconf.json() != null) {
-            urls = processIncludes(runModule, urls, include, newmodDir, newconf, includedJars, includedModules);
-            if (urls == null) {
-              return null;
-            }
-            break inner;
-          } else {
-            // Module not installed - let's try to install it
-            if (installMod(include).failed()) {
-              return null;
-            }
-          }
-        }
-      }
-    }
+  	// true, if analysis completed successfully
+  	boolean success = true;
 
-    return urls;
-  }
+  	final List<String> warnings = new ArrayList<>();
+  	
+  	public ModuleDependencies(final String runModule) {
+  		this.runModule = runModule;
+  		this.urls = new ArrayList<URI>();
+  		this.includedJars = new HashMap<>();
+  		this.includedModules = new ArrayList<>();
+  	}
 
-  /**
-   * 
-   */
-  private void checkWorkerContext() {
-    if (VertxThreadFactory.isWorker(Thread.currentThread()) == false) {
-      throw new IllegalStateException("Not a worker thread");
-    }
-  }
+  	public ModuleDependencies(final String runModule, final URI[] urls) {
+  		this(runModule);
+  		
+  		if (urls != null) {
+  			for(URI uri: urls) {
+  				this.urls.add(uri);
+  			}
+  		}
+  	}
+  	
+  	public final boolean failed() {
+  		return !success;
+  	}
+  	
+  	public final boolean success() {
+  		return success;
+  	}
+  	
+  	public final ModuleDependencies failed(final String message) {
+    	log.error(message);
+  		this.warnings.add(message);
+  		this.success = false;
+  		return this;
+  	}
 
-  /**
-   * 
-   * @param doneHandler
-   * @param deploymentID
-   */
-  private void callDoneHandler(Handler<String> doneHandler, String deploymentID) {
-    if (doneHandler != null) {
-      doneHandler.handle(deploymentID);
-    }
-  }
-
-	/**
-	 * 
-	 * @param doneHandler
-	 * @return
-	 */
-  private Handler<String> wrapDoneHandler(final Handler<String> doneHandler) {
-    if (doneHandler == null) {
-      return null;
-    }
-    final Context context = vertx.getContext();
-    return new Handler<String>() {
-      @Override
-      public void handle(final String deploymentID) {
-        if (context == null) {
-          doneHandler.handle(deploymentID);
-        } else {
-          context.execute(new Runnable() {
-            public void run() {
-              doneHandler.handle(deploymentID);
-            }
-          });
-        }
-      }
-    };
+  	public final URI[] urisToArray() {
+  		return urls.toArray(new URI[urls.size()]);
+  	}
   }
 }

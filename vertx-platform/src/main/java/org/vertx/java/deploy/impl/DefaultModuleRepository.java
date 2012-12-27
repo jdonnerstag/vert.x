@@ -55,10 +55,6 @@ public class DefaultModuleRepository implements ModuleRepository {
 
 	private final VertxInternal vertx;
 
-	// The root directory where we expect to find the modules, resp. where
-	// downloaded modules will be deployed
-	private final File modRoot;
-
 	// Repository Host and Port
 	private final String repoHost;
 	private final int repoPort;
@@ -74,13 +70,9 @@ public class DefaultModuleRepository implements ModuleRepository {
 	 *          Must be != null
 	 * @param defaultRepo
 	 *          Defaults to DEFAULT_REPO_HOST
-	 * @param modRoot
-	 *          The directory path where all the modules are deployed already or
-	 *          will be installed after download from a repository.
 	 */
-	public DefaultModuleRepository(final VertxInternal vertx, final String repo, final File modRoot) {
+	public DefaultModuleRepository(final VertxInternal vertx, final String repo) {
 		this.vertx = Args.notNull(vertx, "vertx");
-		this.modRoot = Args.notNull(modRoot, "modRoot");
     if (repo != null) {
       if (repo.contains(COLON)) {
         this.repoHost = repo.substring(0, repo.indexOf(COLON));
@@ -115,7 +107,7 @@ public class DefaultModuleRepository implements ModuleRepository {
 	 * @param doneHandler
 	 */
 	@Override
-	public ActionFuture<Void> installMod(final String moduleName, final AsyncResultHandler<Void> doneHandler) {
+	public ActionFuture<Void> installMod(final String moduleName, final File modRoot, final AsyncResultHandler<Void> doneHandler) {
 		Args.notNull(moduleName, "moduleName");
     
     DownloadHttpClient client = new DownloadHttpClient(vertx, proxyHost, proxyPort);
@@ -136,8 +128,7 @@ public class DefaultModuleRepository implements ModuleRepository {
     client.backgroundHandler(new Handler<Buffer>() {
 			@Override
 			public void handle(Buffer buffer) {
-	    	log.info("Thread: " + Thread.currentThread().getName() + "; Context: " + vertx.getContext());
-	      unzipModule(moduleName, buffer);
+	      unzipModule(moduleName, modRoot, buffer);
 			}
     });
 
@@ -160,7 +151,6 @@ public class DefaultModuleRepository implements ModuleRepository {
       public void handle(HttpClientResponse resp) {
         if (resp.statusCode == 200) {
           log.info("Downloading module...");
-        	log.info("Thread: " + Thread.currentThread().getName() + "; Context: " + vertx.getContext());
         }
       }
     });
@@ -179,7 +169,7 @@ public class DefaultModuleRepository implements ModuleRepository {
 	 * @param data
 	 * @param doneHandler
 	 */
-	protected boolean unzipModule(final String modName, final Buffer data) {
+	protected boolean unzipModule(final String modName, final File modRoot, final Buffer data) {
 
 		checkWorkerContext();
 

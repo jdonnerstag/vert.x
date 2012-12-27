@@ -117,7 +117,6 @@ public abstract class BlockingAction<T> {
 
 		// Execute the background job
 		this.context = vertx.getOrAssignContext();
-		log.info("Context: " + context);
 		context.executeOnWorker(runner);
 		
 		return future;

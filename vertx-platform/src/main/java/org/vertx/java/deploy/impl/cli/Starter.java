@@ -140,14 +140,10 @@ public class Starter {
       parts = new String[] { cp };
     }
     int index = 0;
-    final URL[] urls = new URL[parts.length];
+    final URI[] urls = new URI[parts.length];
     for (String part: parts) {
-      try {
-        URL url = new File(part).toURI().toURL();
-        urls[index++] = url;
-      } catch (MalformedURLException e) {
-        throw new IllegalArgumentException("Invalid path " + part + " in cp " + cp) ;
-      }
+      URI url = new File(part).toURI();
+      urls[index++] = url;
     }
 
     String sinstances = args.map.get("-instances");

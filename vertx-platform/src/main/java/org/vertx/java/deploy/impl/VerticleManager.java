@@ -20,6 +20,8 @@ import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -135,7 +137,7 @@ public class VerticleManager implements ModuleReloader {
     return holder == null ? null : holder.deployment.name;
   }
 
-  public URL[] getDeploymentURLs() {
+  public URI[] getDeploymentURLs() {
     VerticleHolder holder = getVerticleHolder();
     return holder == null ? null : holder.deployment.urls;
   }
@@ -151,7 +153,7 @@ public class VerticleManager implements ModuleReloader {
   }
 
   public void deployVerticle(final boolean worker, final String main,
-                             final JsonObject config, final URL[] urls,
+                             final JsonObject config, final URI[] urls,
                              final int instances, final File currentModDir,
                              final String includes,
                              final Handler<String> doneHandler) {
@@ -190,17 +192,17 @@ public class VerticleManager implements ModuleReloader {
   }
 
   private void doDeployVerticle(boolean worker, final String main,
-                                   final JsonObject config, final URL[] urls,
+                                   final JsonObject config, final URI[] urls,
                                    int instances, File currentModDir,
                                    String includes, Handler<String> doneHandler)
   {
     checkWorkerContext();
-    URL[] theURLs;
+    URI[] theURLs;
     // The user has specified a list of modules to include when deploying this verticle
     // so we walk the tree of modules adding tree of includes to classpath
     if (includes != null) {
       List<String> includedMods = ModuleConfig.getParameterList(includes);
-      List<URL> includedURLs = new ArrayList<>(Arrays.asList(urls));
+      List<URI> includedURLs = new ArrayList<>(Arrays.asList(urls));
       for (String includedMod: includedMods) {
         File modDir = new File(moduleManager.modRoot(), includedMod);
         ModuleConfig conf;
@@ -220,7 +222,7 @@ public class VerticleManager implements ModuleReloader {
         includedURLs = moduleManager.processIncludes(main, includedURLs, includedMod, modDir, conf,
             includedJars, includedModules);
       }
-      theURLs = includedURLs.toArray(new URL[includedURLs.size()]);
+      theURLs = includedURLs.toArray(new URI[includedURLs.size()]);
     } else {
       theURLs = urls;
     }
@@ -282,7 +284,7 @@ public class VerticleManager implements ModuleReloader {
                           boolean autoRedeploy,
                           boolean worker, final String main,
                           final String modName,
-                          final JsonObject config, final URL[] urls,
+                          final JsonObject config, final URI[] uris,
                           int instances,
                           final File modDir,
                           final Handler<String> doneHandler) {
@@ -328,7 +330,7 @@ public class VerticleManager implements ModuleReloader {
 
     String parentDeploymentName = getDeploymentName();
     final Deployment deployment = new Deployment(deploymentName, modName, instances,
-        config == null ? new JsonObject() : config.copy(), urls, modDir, parentDeploymentName,
+        config == null ? new JsonObject() : config.copy(), uris, modDir, parentDeploymentName,
         autoRedeploy);
     deployments.put(deploymentName, deployment);
     if (parentDeploymentName != null) {
@@ -339,15 +341,23 @@ public class VerticleManager implements ModuleReloader {
     // Workers share a single classloader with all instances in a deployment - this
     // enables them to use libraries that rely on caching or statics to share state
     // (e.g. JDBC connection pools)
-    final ClassLoader sharedLoader = worker ? new ParentLastURLClassLoader(urls, getClass()
-                .getClassLoader()): null;
+    final URL[] urls = new URL[uris.length];
+    for (int i=0; i < urls.length; i++) {
+    	try {
+				urls[i] = uris[i].toURL();
+			} catch (MalformedURLException ex) {
+				log.error("URI to URL converion error", ex);
+			}
+    }
+    
+    @SuppressWarnings("resource")
+		final ClassLoader sharedLoader = worker ? new ParentLastURLClassLoader(urls, getClass().getClassLoader()): null;
 
     for (int i = 0; i < instances; i++) {
 
       // Launch the verticle instance
 
-      final ClassLoader cl = sharedLoader != null ?
-          sharedLoader: new ParentLastURLClassLoader(urls, getClass().getClassLoader());
+      final ClassLoader cl = sharedLoader != null ? sharedLoader: new ParentLastURLClassLoader(urls, getClass().getClassLoader());
       Thread.currentThread().setContextClassLoader(cl);
 
       // We load the VerticleFactory class using the verticle classloader - this allows

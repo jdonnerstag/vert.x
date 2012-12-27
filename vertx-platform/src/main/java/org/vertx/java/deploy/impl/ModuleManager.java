@@ -17,8 +17,7 @@
 package org.vertx.java.deploy.impl;
 
 import java.io.File;
-import java.net.MalformedURLException;
-import java.net.URL;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -41,8 +40,11 @@ import org.vertx.java.core.utils.lang.Args;
 import org.vertx.java.deploy.ModuleRepository;
 
 /**
- * Download, deploy, reload and delete Vertx Modules. Modules may include more
- * than one Verticle, describe dependencies to other modules, etc..
+ * The Module manager attempts to downloads missing Modules from registered 
+ * Repositories. Each Module gets installed in its own subdirectory of modRoot.
+ * and must contain a file called 'mod.json', which is the module config file.
+ * Besides a few other attributes, it also defines dependencies on other modules
+ * ('includes'). The Module manager make sure that all dependencies are resolved.
  * 
  * @author <a href="http://tfox.org">Tim Fox</a>
  * @author Juergen Donnerstag
@@ -254,10 +256,11 @@ public class ModuleManager {
       boolean worker = conf.worker();
       boolean preserveCwd = conf.preserveCwd();
       
-      // If preserveCwd then use the current module directory instead, or the cwd if not in a module
+      // preserveCwd deploys dependencies in a subdirectory to the module,
+      // thus avoiding issues with incompatible module versions
       File modDirToUse = preserveCwd ? currentModDir : modDir;
 
-      List<URL> urls = processIncludes(modName, new ArrayList<URL>(), modName, modDir, conf, 
+      List<URI> urls = processIncludes(modName, new ArrayList<URI>(), modName, modDir, conf, 
       		new HashMap<String, String>(), new HashSet<String>());
       if (urls == null) {
         callDoneHandler(doneHandler, null);
@@ -266,7 +269,7 @@ public class ModuleManager {
 
       boolean autoRedeploy = conf.autoRedeploy();
       verticleManager.doDeploy(depName, autoRedeploy, worker, main, modName, config, 
-      		urls.toArray(new URL[urls.size()]), instances, modDirToUse, doneHandler);
+      		urls.toArray(new URI[urls.size()]), instances, modDirToUse, doneHandler);
     } else {
     	// Install the module first and then try again
       if (installMod(modName).succeeded()) {
@@ -285,36 +288,30 @@ public class ModuleManager {
    * We make sure we only include each module once in the case of loops in the
    * graph
    */
-  public List<URL> processIncludes(final String runModule, List<URL> urls, final String modName, 
+  public List<URI> processIncludes(final String runModule, List<URI> urls, final String modName, 
   		final File modDir, final ModuleConfig conf, final Map<String, String> includedJars, 
   		final Set<String> includedModules) {
   	
     checkWorkerContext();
     // Add the urls for this module
-    try {
-      urls.add(modDir.toURI().toURL());
-      File libDir = new File(modDir, LIB_DIR);
-      if (libDir.exists()) {
-        File[] jars = libDir.listFiles();
-        for (File jar: jars) {
-          URL jarURL = jar.toURI().toURL();
-          String sjarURL = jarURL.toString();
-          String jarName = sjarURL.substring(sjarURL.lastIndexOf("/") + 1);
-          String prevMod = includedJars.get(jarName);
-          if (prevMod != null) {
-            log.warn("Warning! jar file " + jarName + " is contained in module " +
-                     prevMod + " and also in module " + modName +
-                     " which are both included (perhaps indirectly) by module " +
-                     runModule);
-          }
-          includedJars.put(jarName, modName);
-          urls.add(jarURL);
+    urls.add(modDir.toURI());
+    File libDir = new File(modDir, LIB_DIR);
+    if (libDir.exists()) {
+      File[] jars = libDir.listFiles();
+      for (File jar: jars) {
+        URI jarURL = jar.toURI();
+        String sjarURL = jarURL.toString();
+        String jarName = sjarURL.substring(sjarURL.lastIndexOf("/") + 1);
+        String prevMod = includedJars.get(jarName);
+        if (prevMod != null) {
+          log.warn("Warning! jar file " + jarName + " is contained in module " +
+                   prevMod + " and also in module " + modName +
+                   " which are both included (perhaps indirectly) by module " +
+                   runModule);
         }
+        includedJars.put(jarName, modName);
+        urls.add(jarURL);
       }
-    } catch (MalformedURLException e) {
-      // Won't happen
-      log.error("Malformed url", e);
-      return null;
     }
 
     includedModules.add(modName);

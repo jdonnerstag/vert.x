@@ -17,6 +17,7 @@
 package org.vertx.java.deploy.impl;
 
 import java.io.File;
+import java.net.URI;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -53,6 +54,7 @@ public class VertxModule {
 	private final String modName;
 	private final File modDir;
 	private ModuleConfig config = NULL_CONFIG;
+	private ModuleDependencies dependencies;
 	
 	/**
 	 * Constructor
@@ -67,6 +69,7 @@ public class VertxModule {
 
 	public final VertxModule config(final ModuleConfig config) {
 		this.config = config;
+		this.dependencies = null;
 		return this;
 	}
 
@@ -86,6 +89,8 @@ public class VertxModule {
     	} else {
     		log.error("Failed to load config for module '" + modName + "' from " + modDir.getAbsolutePath());
     	}
+    } finally {
+    	this.dependencies = null;
     }
     return null;
 	}
@@ -118,11 +123,33 @@ public class VertxModule {
 	 * @return
 	 */
 	public final ModuleDependencies install() {
-		return moduleManager.install(modName);
+		this.dependencies = moduleManager.install(modName);
+		return this.dependencies;
 	}
-	
-	// TODO get list of all dependencies
-	// TODO get classpath
+
+	/**
+	 * All modules this module is dependent on
+	 * 
+	 * @return
+	 */
+	public final List<String> requiredModules() {
+		if (this.dependencies == null) {
+			install();
+		}
+		return this.dependencies.includedModules;
+	}
+
+	/**
+	 * The classpath for this module and all its required modules
+	 * 
+	 * @return
+	 */
+	public final List<URI> classPath() {
+		if (this.dependencies == null) {
+			install();
+		}
+		return this.dependencies.urls;
+	}
 	
 	public final List<File> files(final String subdir) {
 		File libDir = new File(modDir(), subdir);

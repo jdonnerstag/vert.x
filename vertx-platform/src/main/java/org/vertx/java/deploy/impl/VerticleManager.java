@@ -67,7 +67,7 @@ public class VerticleManager implements ModuleReloader {
   private final CountDownLatch stopLatch = new CountDownLatch(1);
   private Map<String, String> factoryNames = new HashMap<>();
   private final Redeployer redeployer;
-  private final ModuleManager moduleManager;
+  private ModuleManager moduleManager;
 
   public VerticleManager(VertxInternal vertx) {
     this(vertx, (File) null);
@@ -104,6 +104,11 @@ public class VerticleManager implements ModuleReloader {
 
   public final ModuleManager moduleManager() {
   	return moduleManager;
+  }
+
+  public final VerticleManager moduleManager(ModuleManager moduleManager) {
+  	this.moduleManager = moduleManager;
+  	return this;
   }
   
   public void block() {

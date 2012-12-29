@@ -19,7 +19,9 @@ import static org.junit.Assert.*;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.After;
@@ -32,6 +34,7 @@ import org.junit.rules.TemporaryFolder;
 import org.vertx.java.core.impl.DefaultVertx;
 import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
+import org.vertx.java.deploy.ModuleRepository;
 import org.vertx.java.deploy.impl.ModuleWalker.ModuleVisitResult;
 import org.vertx.java.deploy.impl.ModuleWalker.ModuleVisitor;
 
@@ -46,7 +49,7 @@ public class ModuleManagerTest {
 
 	public static DefaultVertx vertx;
 	public VerticleManager verticleManager;
-	public ModuleManager moduleManager;
+	public MyModuleManager moduleManager;
 
 	@Rule
 	public TemporaryFolder modDir = new TemporaryFolder();	
@@ -65,7 +68,10 @@ public class ModuleManagerTest {
 	@Before
 	public void setUp() throws Exception {
 		verticleManager = new VerticleManager(vertx, modDir.getRoot());
-		moduleManager = verticleManager.moduleManager();
+		
+		moduleManager = new MyModuleManager(verticleManager, modDir.getRoot());
+		verticleManager.moduleManager(moduleManager);
+		assertSame(MyModuleManager.class, verticleManager.moduleManager().getClass());
 
 		moduleManager.moduleRepositories().clear();
     moduleManager.moduleRepositories().add(
@@ -86,14 +92,14 @@ public class ModuleManagerTest {
   }
 
   @Test
-  public void testInstallPreserveCwd() throws Exception {
+  public void testInstallOne() throws Exception {
     String modName = "testmod8-1";
     moduleManager.installOne(modName, 30, TimeUnit.SECONDS);
     assertTrue(modDir.newFile(modName).isDirectory());
   }
 
   @Test
-  public void testInstallAllPreserveCwd() throws Exception {
+  public void testInstallAll() throws Exception {
     String modName = "testmod8-1";
     moduleManager.install(modName);
     assertTrue(modDir.newFile(modName).isDirectory());
@@ -109,8 +115,8 @@ public class ModuleManagerTest {
     final List<String> list = new ArrayList<>();
     moduleManager.moduleWalker(modName, new ModuleVisitor<Void>() {
 			@Override
-			protected ModuleVisitResult visit(String modName, VertxModule module, ModuleWalker<Void> walker) {
-				list.add(modName);
+			protected ModuleVisitResult visit(VertxModule module, ModuleWalker<Void> walker) {
+				list.add(module.modName());
 				return ModuleVisitResult.CONTINUE;
 			}});
     
@@ -120,5 +126,64 @@ public class ModuleManagerTest {
     assertTrue(list.contains("testmod8-3"));
     
     moduleManager.printModuleTree(modName, System.out);
+  }
+
+  @Test
+  public void testNullConfig() {
+    String modName = "simumod1-1";
+    VertxModule module = moduleManager.module(modName);
+    assertFalse(module.exists());
+    assertEquals(VertxModule.NULL_CONFIG, module.config());
+    assertNull(module.config().main());
+  }
+
+  @Test
+  public void testSimulatedModule() {
+    VertxModule module1 = createModule("simumod1");
+    module1.config().json().putString("main", "myMain");
+    module1.config().json().putString("includes", "simumod1-1, simumod1-2");
+
+    VertxModule module1_1 = createModule("simumod1-1");
+    module1_1.config().json().putString("includes", "simumod1-1-1");
+
+    VertxModule module1_2 = createModule("simumod1-2");
+
+    VertxModule module1_1_1 = createModule("simumod1-1-1");
+    module1_1_1.config().json().putString("includes", "simumod1-1-1-1");
+    
+    moduleManager.printModuleTree(module1.modName(), System.out);
+  }
+  
+  private VertxModule createModule(String name) {
+    VertxModule module = new VertxModule(moduleManager, name) {
+    	@Override
+    	public boolean exists() {
+    		return /* modDir.canRead() && */ config() != NULL_CONFIG;
+    	}
+    };
+    
+    module.config(new ModuleConfig());
+    assertNotSame(VertxModule.NULL_CONFIG, module.config());
+    
+    moduleManager.sims.put(module.modName(), module);
+    return module;
+  }
+  
+  public class MyModuleManager extends ModuleManager {
+
+  	public final Map<String, VertxModule> sims = new HashMap<>();
+  	
+		public MyModuleManager(VerticleManager verticleManager, File modRoot, ModuleRepository... repos) {
+			super(verticleManager, modRoot, repos);
+		}
+
+		@Override
+		public VertxModule module(String modName) {
+			VertxModule m = sims.get(modName);
+			if (m != null) {
+				return m;
+			}
+			return super.module(modName);
+		}
   }
 }

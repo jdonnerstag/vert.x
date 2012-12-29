@@ -21,7 +21,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import org.vertx.java.core.json.JsonObject;
 import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
 import org.vertx.java.core.utils.lang.Args;
@@ -37,7 +36,7 @@ public class VertxModule {
 
 	private static final Logger log = LoggerFactory.getLogger(VertxModule.class);
 
-	public static final ModuleConfig NULL_CONFIG = new ModuleConfig(new JsonObject());
+	public static final ModuleConfig NULL_CONFIG = new ModuleConfig();
 	
 	public static final boolean exists(final File modDir, final String modName) {
 		return getModDir(modDir, modName).canRead();
@@ -50,7 +49,7 @@ public class VertxModule {
 		return new File(modDir, modName);
 	}
 
-//	private final ModuleManager moduleManager;
+  private final ModuleManager moduleManager;
 	private final String modName;
 	private final File modDir;
 	private ModuleConfig config = NULL_CONFIG;
@@ -61,7 +60,7 @@ public class VertxModule {
 	 * @param vertx
 	 */
 	public VertxModule(final ModuleManager moduleManager, final String modName) {
-		/* this.moduleManager = */ Args.notNull(moduleManager, "moduleManager");
+		this.moduleManager = Args.notNull(moduleManager, "moduleManager");
 		this.modName = Args.notNull(modName, "modName");
 		this.modDir = getModDir(moduleManager.modRoot(), modName);
 	}
@@ -113,6 +112,17 @@ public class VertxModule {
 	public boolean exists() {
 		return modDir.canRead() && config() != NULL_CONFIG;
 	}
+
+	/**
+	 * Install the module and all its dependencies
+	 * @return
+	 */
+	public final ModuleDependencies install() {
+		return moduleManager.install(modName);
+	}
+	
+	// TODO get list of all dependencies
+	// TODO get classpath
 	
 	public final List<File> files(final String subdir) {
 		File libDir = new File(modDir(), subdir);

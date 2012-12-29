@@ -65,8 +65,13 @@ public class ModuleConfig {
 	
 	/**
 	 * Constructor
-	 * 
-	 * @param vertx
+	 */
+	public ModuleConfig() {
+		this(new JsonObject());
+	}
+	
+	/**
+	 * Constructor
 	 */
 	public ModuleConfig(final JsonObject config) {
 		this.config = Args.notNull(config, "config");

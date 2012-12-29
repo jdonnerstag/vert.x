@@ -146,7 +146,7 @@ public class ModuleManager {
 	 * @param modName
 	 * @return
 	 */
-	public final VertxModule module(final String modName) {
+	public VertxModule module(final String modName) {
 		Args.notNull(modName, "modName");
 		return new VertxModule(this, modName);
 	}
@@ -223,29 +223,29 @@ public class ModuleManager {
 	   */
     moduleWalker(modName, new ModuleVisitor<Void>() {
     	@Override
-    	protected boolean onMissingModule(final String modName, final ModuleWalker<Void> walker) 
+    	protected boolean onMissingModule(final VertxModule module, final ModuleWalker<Void> walker) 
     			throws Exception {
-	      boolean rtn = installOne(modName).succeeded();
+	      boolean rtn = installOne(module.modName()).succeeded();
 	      if (!rtn) {
-	        pdata.failed("Failed to install module: " + modName);
+	        pdata.failed("Failed to install module: " + module.modName());
 	      } 
 	      return rtn;
     	}
     	
 			@Override
-			protected ModuleVisitResult visit(final String modName, final VertxModule module, 
+			protected ModuleVisitResult visit(final VertxModule module, 
 					final ModuleWalker<Void> walker) {
 
 		    if (!module.exists()) {
-	        pdata.failed("Failed to install module: " + modName);
+	        pdata.failed("Failed to install module: " + module.modName());
 		    	return ModuleVisitResult.TERMINATE;
 		    }
 
-		    if (pdata.includedModules.contains(modName)) {
+		    if (pdata.includedModules.contains(module.modName())) {
 		    	return ModuleVisitResult.SKIP_SUBTREE;
 		    }
 		    
-		    pdata.includedModules.add(modName);
+		    pdata.includedModules.add(module.modName());
 
 		    // Add the urls for this module
 		    pdata.urls.add(module.modDir().toURI());
@@ -315,14 +315,18 @@ public class ModuleManager {
   	try {
 	    moduleWalker(modName, new ModuleVisitor<Void>() {
 				@Override
-				protected ModuleVisitResult visit(String modName, VertxModule module, ModuleWalker<Void> walker) {
-					out.print("-");
+				protected ModuleVisitResult visit(VertxModule module, ModuleWalker<Void> walker) {
+					StringBuilder buf = new StringBuilder();
+					buf.append("-");
 					for (int i=0; i < (walker.stack().size() - 1) * 2; i++) {
-						out.print("-");
+						buf.append("-");
 					}
-					out.print(" ");
-					out.println(modName);
-					
+					buf.append(" ");
+					buf.append(module.modName());
+					if (!module.exists()) {
+						buf.append(" (missing)");
+					}
+					out.println(buf.toString());
 					return ModuleVisitResult.CONTINUE;
 				}});
   	} catch (Exception ex) {

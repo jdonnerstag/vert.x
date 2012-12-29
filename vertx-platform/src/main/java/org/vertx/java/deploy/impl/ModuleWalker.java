@@ -114,7 +114,7 @@ public class ModuleWalker<T> {
 
 		VertxModule module = module(modName);
 		if (!module.exists()) {
-			if (visitor.onMissingModule(modName, this)) {
+			if (visitor.onMissingModule(module, this)) {
   			module.loadConfig(true);
 			}
 		}
@@ -136,7 +136,7 @@ public class ModuleWalker<T> {
   		for(String modName: mod.config().includes()) {
   			VertxModule module = module(modName);
   			if (!module.exists()) {
-  				if (visitor.onMissingModule(modName, this)) {
+  				if (visitor.onMissingModule(module, this)) {
   	  			module.loadConfig(true);
   				}
   			}
@@ -165,9 +165,9 @@ public class ModuleWalker<T> {
 	private ModuleVisitResult visitModule(final String modName, final VertxModule module) throws Exception {
 		ModuleVisitResult res = ModuleVisitResult.TERMINATE;
 		try {
-			res = visitor.visit(modName, module, this);
+			res = visitor.visit(module, this);
 		} catch (Exception ex) {
-			res = visitor.onException(modName, module, ex, this);
+			res = visitor.onException(module, this, ex);
 		}
 		if (res == ModuleVisitResult.TERMINATE) {
 			return res;
@@ -193,27 +193,21 @@ public class ModuleWalker<T> {
   
   	/**
   	 * Invoked for each module found.
-  	 * 
-  	 * @param modName Module name
-  	 * @param config null, if the module is not installed
   	 */
-  	protected abstract ModuleVisitResult visit(String modName, VertxModule module, 
-  			ModuleWalker<T> walker);
+  	protected abstract ModuleVisitResult visit(VertxModule module, ModuleWalker<T> walker);
 
   	/**
   	 * Upon an exception. By default re-throws the exception.
   	 */
-  	protected ModuleVisitResult onException(String modName, VertxModule module, 
-  			Exception ex, ModuleWalker<T> walker) throws Exception {
-			
+  	protected ModuleVisitResult onException(VertxModule module, ModuleWalker<T> walker, 
+  			Exception ex) throws Exception {
   		throw ex;
   	}
 
   	/**
   	 * Upon an exception. By default re-throws the exception.
   	 */
-  	protected boolean onMissingModule(String modName, 
-  			ModuleWalker<T> walker) throws Exception {
+  	protected boolean onMissingModule(VertxModule module, ModuleWalker<T> walker) throws Exception {
   		return false;
   	}
   }

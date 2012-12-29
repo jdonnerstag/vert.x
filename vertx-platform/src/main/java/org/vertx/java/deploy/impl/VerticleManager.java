@@ -77,12 +77,13 @@ public class VerticleManager implements ModuleReloader {
     this.vertx = Args.notNull(vertx, "vertx");
     this.moduleManager = Args.notNull(moduleManager, "moduleManager");
     
-    // TODO doesn't fit to explanation given in VertxLocator
+    // TODO doesn't fit the explanation given in VertxLocator
     VertxLocator.vertx = vertx;
     VertxLocator.container = new Container(this);
     
     this.redeployer = new Redeployer(vertx, this.moduleManager.modRoot(), this);
-    
+
+    // TODO change to use VertxConfig
     try (InputStream is = getClass().getClassLoader().getResourceAsStream("langs.properties")) {
       if (is == null) {
         log.warn("No language mappings found!");
@@ -285,12 +286,12 @@ public class VerticleManager implements ModuleReloader {
     }
     
     boolean worker = conf.worker();
+    boolean autoRedeploy = conf.autoRedeploy();
     boolean preserveCwd = conf.preserveCwd();
     
-    File modDirToUse = preserveCwd ? currentModDir != null ? 
-    		currentModDir : conf.modDir() : conf.modDir();
+    File modDirToUse = preserveCwd && currentModDir != null ? 
+    		currentModDir : conf.modDir();
 
-    boolean autoRedeploy = conf.autoRedeploy();
     doDeploy(depName, autoRedeploy, worker, main, modName, config, 
     		deps.urisToArray(), instances, modDirToUse, doneHandler);
   }

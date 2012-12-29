@@ -18,6 +18,7 @@ package org.vertx.java.deploy.impl;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -97,6 +98,13 @@ public class ModuleConfig {
 	public final File modDir() {
 		return modDir;
 	}
+
+	public final String modName() {
+		if (modDir == null) {
+			return null;
+		}
+		return modDir.getName();
+	}
 	
 	public final String main() {
 		return config.getString(CONFIG_MAIN);
@@ -152,5 +160,15 @@ public class ModuleConfig {
 			res = Collections.emptyList();
 		}
 		return res;
+	}
+
+	public final List<File> files(final String subdir) {
+		File libDir = new File(modDir(), subdir);
+		if (libDir.exists()) {
+			File[] files = libDir.listFiles();
+			return Arrays.asList(files);
+			
+		}
+		return Collections.emptyList();
 	}
 }

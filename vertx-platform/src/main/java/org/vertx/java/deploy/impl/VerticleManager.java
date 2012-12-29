@@ -50,7 +50,6 @@ import org.vertx.java.deploy.Container;
 import org.vertx.java.deploy.ModuleRepository;
 import org.vertx.java.deploy.Verticle;
 import org.vertx.java.deploy.VerticleFactory;
-import org.vertx.java.deploy.impl.ModuleManager.ModuleDependencies;
 
 /**
  *
@@ -199,19 +198,10 @@ public class VerticleManager implements ModuleReloader {
     if (includes != null) {
       List<String> includedMods = ModuleConfig.getParameterList(includes);
       for (String includedMod: includedMods) {
-        File modDir = new File(moduleManager.modRoot(), includedMod);
-        ModuleConfig conf = null;
-        while (conf == null) {
-        	try {
-        		conf = new ModuleConfig(modDir, includedMod);
-            moduleManager.processIncludes(pdata, main, conf);
-        	} catch (Exception ex) {
-            // Try and install the module
-            if (moduleManager.installOne(includedMod).failed()) {
-              callDoneHandler(doneHandler, null);
-              return false;
-            }
-          }
+      	moduleManager.install(includedMod, pdata);
+      	if (pdata.failed()) {
+          callDoneHandler(doneHandler, null);
+          return false;
         }
       }
       theURLs = pdata.urls.toArray(new URI[pdata.urls.size()]);

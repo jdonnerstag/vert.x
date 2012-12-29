@@ -18,6 +18,8 @@ package org.vertx.java.deploy.impl;
 import static org.junit.Assert.*;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.After;
@@ -28,12 +30,19 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.vertx.java.core.impl.DefaultVertx;
+import org.vertx.java.core.logging.Logger;
+import org.vertx.java.core.logging.impl.LoggerFactory;
+import org.vertx.java.deploy.impl.ModuleWalker.ModuleVisitResult;
+import org.vertx.java.deploy.impl.ModuleWalker.ModuleVisitor;
 
 /**
  * 
  * @author Juergen Donnerstag
  */
 public class ModuleManagerTest {
+
+  @SuppressWarnings("unused")
+	private static final Logger log = LoggerFactory.getLogger(ModuleManagerTest.class);
 
 	public static DefaultVertx vertx;
 	public VerticleManager verticleManager;
@@ -90,5 +99,26 @@ public class ModuleManagerTest {
     assertTrue(modDir.newFile(modName).isDirectory());
     assertTrue(modDir.newFile("testmod8-2").isDirectory());
     assertTrue(modDir.newFile("testmod8-3").isDirectory());
+  }
+  
+  @Test
+  public void testWalker() throws Exception {
+    String modName = "testmod8-1";
+    moduleManager.install(modName);
+    
+    final List<String> list = new ArrayList<>();
+    moduleManager.moduleWalker(modName, new ModuleVisitor<Void>() {
+			@Override
+			protected ModuleVisitResult visit(String modName, ModuleConfig config, ModuleWalker<Void> walker) {
+				list.add(modName);
+				return ModuleVisitResult.CONTINUE;
+			}});
+    
+    assertEquals(3, list.size());
+    assertTrue(list.contains("testmod8-1"));
+    assertTrue(list.contains("testmod8-2"));
+    assertTrue(list.contains("testmod8-3"));
+    
+    moduleManager.printModuleTree(modName, System.out);
   }
 }

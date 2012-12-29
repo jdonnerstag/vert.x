@@ -17,11 +17,9 @@
 package org.vertx.java.deploy.impl;
 
 import java.io.File;
-import java.net.URI;
+import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import org.vertx.java.core.AsyncResult;
@@ -31,6 +29,8 @@ import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
 import org.vertx.java.core.utils.lang.Args;
 import org.vertx.java.deploy.ModuleRepository;
+import org.vertx.java.deploy.impl.ModuleWalker.ModuleVisitResult;
+import org.vertx.java.deploy.impl.ModuleWalker.ModuleVisitor;
 
 /**
  * The Module manager attempts to downloads missing Modules from registered 
@@ -44,7 +44,7 @@ import org.vertx.java.deploy.ModuleRepository;
  */
 public class ModuleManager {
 
-	private static final Logger log = LoggerFactory.getLogger(ModuleManager.class);
+	static final Logger log = LoggerFactory.getLogger(ModuleManager.class);
 
 	public static final String MODULE_ROOT_DIR_PROPERTY_NAME = "vertx.mods";
 	private static final String DEFAULT_MODULE_ROOT_DIR = "mods";
@@ -214,85 +214,80 @@ public class ModuleManager {
    * @return
    */
   public ModuleDependencies install(final String modName) {
+		return install(modName, new ModuleDependencies(modName));
+  }
+		
+  /**
+   * (Sync) Install a module and all its declared dependencies.
+   * 
+   * @param modName
+   * @return
+   */
+  public ModuleDependencies install(final String modName, final ModuleDependencies pdata) {
 		Args.notNull(modName, "modName");
-    ModuleDependencies pdata = new ModuleDependencies(modName);
+		Args.notNull(pdata, "pdata");
+
+		pdata.runModule = modName;
+		
+	  /**
+	   * We walk through the graph of includes making sure we only add each one once.
+	   * We keep track of what jars have been included so we can flag errors if paths
+	   * are included more than once.
+	   * We make sure we only include each module once in the case of loops in the
+	   * graph.
+	   */
+    moduleWalker(modName, new ModuleVisitor<Void>() {
+    	@Override
+    	protected boolean onMissingModule(final String modName, final ModuleWalker<Void> walker) 
+    			throws Exception {
+	      boolean rtn = installOne(modName).succeeded();
+	      if (!rtn) {
+	        pdata.failed("Failed to install module: " + modName);
+	      } 
+	      return rtn;
+    	}
+    	
+			@Override
+			protected ModuleVisitResult visit(final String modName, final ModuleConfig config, 
+					final ModuleWalker<Void> walker) {
+
+		    if (config == null) {
+	        pdata.failed("Failed to install module: " + modName);
+		    	return ModuleVisitResult.TERMINATE;
+		    }
+
+		    if (pdata.includedModules.contains(modName)) {
+		    	return ModuleVisitResult.SKIP_SUBTREE;
+		    }
+		    
+		    pdata.includedModules.add(modName);
+
+		    // Add the urls for this module
+		    pdata.urls.add(config.modDir().toURI());
+		    for (File jar: config.files(LIB_DIR)) {
+	        String prevMod = pdata.includedJars.get(jar.getName());
+	        if (prevMod != null) {
+	          log.warn("Warning! jar file " + jar.getName() + " is contained in module(s) [" +
+	                   prevMod + "] and also in module " + modName +
+	                   " which are both included (perhaps indirectly) by module " +
+	                   pdata.runModule);
+	          
+	          pdata.includedJars.put(jar.getName(), prevMod + ", " + modName);
+	        } else {
+	          pdata.includedJars.put(jar.getName(), modName);
+	        }
+	        pdata.urls.add(jar.toURI());
+		    }
+		    
+				return ModuleVisitResult.CONTINUE;
+			}
+    });
     
-    if (ModuleConfig.exists(modRoot, modName) == false) {
-      if (installOne(modName).failed()) {
-        return pdata.failed("Failed to install module: " + modName);
-      }
-    } else {
-    	log.info("Module '" + modName + "' is already installed");
-    }
-    
-    ModuleConfig conf = modConfig(modName, false);
-    if (conf == null) {
-    	// Something went wrong
-      return pdata.failed("Failed to load module config: " + modConfigFile(modName));
-    }
+    ModuleConfig conf = modConfig(modName, true);
     
     String main = conf.main();
     if (main == null) {
       return pdata.failed("Runnable module " + modName + " mod.json must contain a \"main\" field");
-    }
-
-    return processIncludes(pdata, modName, conf);
-  }
-  
-  /**
-   * We walk through the graph of includes making sure we only add each one once.
-   * We keep track of what jars have been included so we can flag errors if paths
-   * are included more than once.
-   * We make sure we only include each module once in the case of loops in the
-   * graph.
-   */
-  public ModuleDependencies processIncludes(final ModuleDependencies pdata, final String modName, 
-  		final ModuleConfig conf) {
-
-    // Add the urls for this module
-    pdata.urls.add(conf.modDir().toURI());
-    File libDir = new File(conf.modDir(), LIB_DIR);
-    if (libDir.exists()) {
-      File[] jars = libDir.listFiles();
-      for (File jar: jars) {
-        String prevMod = pdata.includedJars.get(jar.getName());
-        if (prevMod != null) {
-          log.warn("Warning! jar file " + jar.getName() + " is contained in module(s) [" +
-                   prevMod + "] and also in module " + modName +
-                   " which are both included (perhaps indirectly) by module " +
-                   pdata.runModule);
-          
-          pdata.includedJars.put(jar.getName(), prevMod + ", " + modName);
-        } else {
-          pdata.includedJars.put(jar.getName(), modName);
-        }
-        pdata.urls.add(jar.toURI());
-      }
-    }
-
-    pdata.includedModules.add(modName);
-
-    List<String> sarr = conf.includes();
-    for (String include: sarr) {
-      if (pdata.includedModules.contains(include)) {
-        // Ignore - already included this one
-      } else {
-     		ModuleConfig newconf = modConfig(include, false);
-     		if (newconf == null) {
-          // Module not installed - let's try to install it
-          if (installOne(include).failed()) {
-            return pdata.failed("Failed to install all dependencies");
-          }
-       		newconf = modConfig(include, false);
-       		if (newconf == null) {
-            return pdata.failed("?? The module config should really be now available");
-       		}
-     		}
-     		
-        if (processIncludes(pdata, include, newconf).failed()) {
-          return pdata;
-        }
-      }
     }
 
     return pdata;
@@ -317,64 +312,36 @@ public class ModuleManager {
       }
     }
   }
+
+  /*
+   * Walk the module tree
+   */
+  public final <T> T moduleWalker(String modName, ModuleVisitor<T> visitor) {
+  	return new ModuleWalker<T>(this).visit2(modName, visitor);
+  }
   
   /**
-   * Data only 
+   * Print out the module tree
+   * 
+   * @param modName
+   * @param out
    */
-  public static class ModuleDependencies {
-  	
-  	// The root module where the analysis started
-  	final String runModule;
-  	
-  	// The module's classpath: all required module directories and all jars
-  	final List<URI> urls;
-  	
-  	// List of all Jars contributed by all modules from their respective 'lib' directory
-  	// jar -> module(s)
-  	final Map<String, String> includedJars;
-
-  	// List of all required modules (includes)
-  	final List<String> includedModules;
-
-  	// true, if analysis completed successfully
-  	boolean success = true;
-
-  	final List<String> warnings = new ArrayList<>();
-  	
-  	public ModuleDependencies(final String runModule) {
-  		this.runModule = runModule;
-  		this.urls = new ArrayList<URI>();
-  		this.includedJars = new HashMap<>();
-  		this.includedModules = new ArrayList<>();
-  	}
-
-  	public ModuleDependencies(final String runModule, final URI[] urls) {
-  		this(runModule);
-  		
-  		if (urls != null) {
-  			for(URI uri: urls) {
-  				this.urls.add(uri);
-  			}
-  		}
-  	}
-  	
-  	public final boolean failed() {
-  		return !success;
-  	}
-  	
-  	public final boolean success() {
-  		return success;
-  	}
-  	
-  	public final ModuleDependencies failed(final String message) {
-    	log.error(message);
-  		this.warnings.add(message);
-  		this.success = false;
-  		return this;
-  	}
-
-  	public final URI[] urisToArray() {
-  		return urls.toArray(new URI[urls.size()]);
+  public void printModuleTree(final String modName, final PrintStream out) {
+  	try {
+	    moduleWalker(modName, new ModuleVisitor<Void>() {
+				@Override
+				protected ModuleVisitResult visit(String modName, ModuleConfig config, ModuleWalker<Void> walker) {
+					out.print("-");
+					for (int i=0; i < (walker.stack().size() - 1) * 2; i++) {
+						out.print("-");
+					}
+					out.print(" ");
+					out.println(modName);
+					
+					return ModuleVisitResult.CONTINUE;
+				}});
+  	} catch (Exception ex) {
+  		log.error(ex);
   	}
   }
 }

@@ -44,7 +44,7 @@ import org.vertx.java.deploy.impl.ModuleWalker.ModuleVisitor;
  */
 public class ModuleManager {
 
-	static final Logger log = LoggerFactory.getLogger(ModuleManager.class);
+	private static final Logger log = LoggerFactory.getLogger(ModuleManager.class);
 
 	public static final String MODULE_ROOT_DIR_PROPERTY_NAME = "vertx.mods";
 	private static final String DEFAULT_MODULE_ROOT_DIR = "mods";
@@ -144,26 +144,11 @@ public class ModuleManager {
 	 * (Sync) Gets the config for the module
 	 * 
 	 * @param modName
-	 * @param throwException
 	 * @return
 	 */
-	public final ModuleConfig modConfig(final String modName, boolean throwException) {
+	public final VertxModule module(final String modName) {
 		Args.notNull(modName, "modName");
-    try {
-	    return new ModuleConfig(modRoot, modName);
-    } catch (Exception ex) {
-    	if (throwException) {
-    		throw new RuntimeException(ex);
-    	} else {
-    		log.error("Failed to load module config: " + modConfigFile(modName));
-    	}
-    }
-    return null;
-	}
-
-	public final String modConfigFile(final String modName) {
-		Args.notNull(modName, "modName");
-		return ModuleConfig.getFile(modRoot, modName).getAbsolutePath();
+		return new VertxModule(this, modName);
 	}
 
 	/**
@@ -248,10 +233,10 @@ public class ModuleManager {
     	}
     	
 			@Override
-			protected ModuleVisitResult visit(final String modName, final ModuleConfig config, 
+			protected ModuleVisitResult visit(final String modName, final VertxModule module, 
 					final ModuleWalker<Void> walker) {
 
-		    if (config == null) {
+		    if (!module.exists()) {
 	        pdata.failed("Failed to install module: " + modName);
 		    	return ModuleVisitResult.TERMINATE;
 		    }
@@ -263,8 +248,8 @@ public class ModuleManager {
 		    pdata.includedModules.add(modName);
 
 		    // Add the urls for this module
-		    pdata.urls.add(config.modDir().toURI());
-		    for (File jar: config.files(LIB_DIR)) {
+		    pdata.urls.add(module.modDir().toURI());
+		    for (File jar: module.files(LIB_DIR)) {
 	        String prevMod = pdata.includedJars.get(jar.getName());
 	        if (prevMod != null) {
 	          log.warn("Warning! jar file " + jar.getName() + " is contained in module(s) [" +
@@ -282,10 +267,10 @@ public class ModuleManager {
 				return ModuleVisitResult.CONTINUE;
 			}
     });
+
+    VertxModule module = module(modName);
     
-    ModuleConfig conf = modConfig(modName, true);
-    
-    String main = conf.main();
+    String main = module.config().main();
     if (main == null) {
       return pdata.failed("Runnable module " + modName + " mod.json must contain a \"main\" field");
     }
@@ -330,7 +315,7 @@ public class ModuleManager {
   	try {
 	    moduleWalker(modName, new ModuleVisitor<Void>() {
 				@Override
-				protected ModuleVisitResult visit(String modName, ModuleConfig config, ModuleWalker<Void> walker) {
+				protected ModuleVisitResult visit(String modName, VertxModule module, ModuleWalker<Void> walker) {
 					out.print("-");
 					for (int i=0; i < (walker.stack().size() - 1) * 2; i++) {
 						out.print("-");

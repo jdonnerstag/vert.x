@@ -266,14 +266,15 @@ public class VerticleManager implements ModuleReloader {
     	callDoneHandler(doneHandler, null);
     	return;
     }
-    
-    ModuleConfig conf = moduleManager.modConfig(modName, false);
-    if (conf == null) {
+
+    VertxModule module = moduleManager.module(modName);
+    if (!module.exists()) {
     	log.error("Installed the module '" + modName + "'. But still unable to load config");
       callDoneHandler(doneHandler, null);
       return;
     }
     
+    ModuleConfig conf = module.config();
     String main = conf.main();
     if (main == null) {
       log.error("Runnable module " + modName + " mod.json must contain a \"main\" field");

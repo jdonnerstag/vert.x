@@ -109,7 +109,7 @@ public class ModuleManagerTest {
     final List<String> list = new ArrayList<>();
     moduleManager.moduleWalker(modName, new ModuleVisitor<Void>() {
 			@Override
-			protected ModuleVisitResult visit(String modName, ModuleConfig config, ModuleWalker<Void> walker) {
+			protected ModuleVisitResult visit(String modName, VertxModule module, ModuleWalker<Void> walker) {
 				list.add(modName);
 				return ModuleVisitResult.CONTINUE;
 			}});

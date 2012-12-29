@@ -82,15 +82,35 @@ public class ModuleConfig {
 	 * @return
 	 */
 	public ModuleConfig(final File modDir, final String modName) throws Exception {
-		this.modDir = new File(Args.notNull(modDir, "modDir"), modName);
+		this(new File(modDir, modName));
+	}
+
+	/**
+	 * Load the module config from modDir + mod.json. The content must be JSON
+	 * compliant.
+	 * 
+	 * @param modName
+	 * @param modDir
+	 * @return
+	 */
+	public ModuleConfig(final File modDir) throws Exception {
+		this.modDir = Args.notNull(modDir, "modDir");
 		try {
-			config = new JsonObject(new File(this.modDir, CONFIG_FILENAME));
+			config = new JsonObject(configFile());
 		} catch (Exception ex) {
-			throw new RuntimeException("Failed to load config for module '" + modName + 
+			throw new RuntimeException("Failed to load config for module '" + modName() + 
 					"' from " + modDir.getAbsolutePath(), ex);
 		}
 	}
 
+	public final File configFile() {
+		return new File(this.modDir, CONFIG_FILENAME);
+	}
+
+	public final String configFile2() {
+		return new File(this.modDir, CONFIG_FILENAME).getAbsolutePath();
+	}
+	
 	public final JsonObject json() {
 		return config;
 	}

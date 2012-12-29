@@ -33,7 +33,7 @@ public class ModuleWalker<T> {
 	private final ModuleManager moduleManager;
 
 	// Parent are pushed onto the stack which is made available
-	private final Stack<ModuleConfig> stack = new Stack<>();
+	private final Stack<VertxModule> stack = new Stack<>();
 	
 	private ModuleVisitor<T> visitor;
 
@@ -50,13 +50,13 @@ public class ModuleWalker<T> {
 	}
 
 	/**
-	 * Get the mod.json config for module modName
+	 * Get the module by name
 	 * 
 	 * @param modName
 	 * @return
 	 */
-	private ModuleConfig config(String modName) {
-		return moduleManager.modConfig(modName, false);
+	private VertxModule module(String modName) {
+		return moduleManager.module(modName);
 	}
 
 	/**
@@ -80,7 +80,7 @@ public class ModuleWalker<T> {
 	 * 
 	 * @return
 	 */
-	public final Collection<ModuleConfig> stack() {
+	public final Collection<VertxModule> stack() {
 		return Collections.unmodifiableCollection(this.stack);
 	}
 
@@ -96,7 +96,7 @@ public class ModuleWalker<T> {
 		try {
 			return visit(modName, visitor);
 		} catch (Exception ex) {
-			throw new RuntimeException(ex.getMessage());
+			throw new RuntimeException(ex.getMessage(), ex);
 		}
 	}
 
@@ -112,15 +112,15 @@ public class ModuleWalker<T> {
 		Args.notNull(modName, "modName");
 		this.visitor = Args.notNull(visitor, "visitor");
 
-		ModuleConfig config = config(modName);
-		if (config == null) {
+		VertxModule module = module(modName);
+		if (!module.exists()) {
 			if (visitor.onMissingModule(modName, this)) {
-  			config = config(modName);
+  			module.loadConfig(true);
 			}
 		}
 		
-		this.stack.push(config);
-		visitModule(modName, config);
+		this.stack.push(module);
+		visitModule(modName, module);
 		this.stack.pop();
 
 		return result;
@@ -129,19 +129,19 @@ public class ModuleWalker<T> {
 	/**
 	 * Visit all includes of a module
 	 */
-	private ModuleVisitResult visitIncludes(final ModuleConfig cfg) throws Exception {
-		this.stack.push(cfg);
+	private ModuleVisitResult visitIncludes(final VertxModule mod) throws Exception {
+		this.stack.push(mod);
 		ModuleVisitResult res = ModuleVisitResult.CONTINUE;
 		try {
-  		for(String modName: cfg.includes()) {
-  			ModuleConfig config = config(modName);
-  			if (config == null) {
+  		for(String modName: mod.config().includes()) {
+  			VertxModule module = module(modName);
+  			if (!module.exists()) {
   				if (visitor.onMissingModule(modName, this)) {
-  	  			config = config(modName);
+  	  			module.loadConfig(true);
   				}
   			}
 
-  			res = visitModule(modName, config);
+  			res = visitModule(modName, module);
   			if (res == null) {
   				res = ModuleVisitResult.CONTINUE;
   			}
@@ -162,12 +162,12 @@ public class ModuleWalker<T> {
 	 * Invoke the client visitor on a specific module and continue 
 	 * depending on the return value
 	 */
-	private ModuleVisitResult visitModule(final String modName, ModuleConfig config) throws Exception {
+	private ModuleVisitResult visitModule(final String modName, final VertxModule module) throws Exception {
 		ModuleVisitResult res = ModuleVisitResult.TERMINATE;
 		try {
-			res = visitor.visit(modName, config, this);
+			res = visitor.visit(modName, module, this);
 		} catch (Exception ex) {
-			res = visitor.onException(modName, config, ex, this);
+			res = visitor.onException(modName, module, ex, this);
 		}
 		if (res == ModuleVisitResult.TERMINATE) {
 			return res;
@@ -177,7 +177,7 @@ public class ModuleWalker<T> {
 			return res;
 		} 
 		
-		res = visitIncludes(config);
+		res = visitIncludes(module);
 		if (res != null && res == ModuleVisitResult.TERMINATE) {
 			return res;
 		} 
@@ -197,13 +197,13 @@ public class ModuleWalker<T> {
   	 * @param modName Module name
   	 * @param config null, if the module is not installed
   	 */
-  	protected abstract ModuleVisitResult visit(String modName, ModuleConfig config, 
+  	protected abstract ModuleVisitResult visit(String modName, VertxModule module, 
   			ModuleWalker<T> walker);
 
   	/**
   	 * Upon an exception. By default re-throws the exception.
   	 */
-  	protected ModuleVisitResult onException(String modName, ModuleConfig config, 
+  	protected ModuleVisitResult onException(String modName, VertxModule module, 
   			Exception ex, ModuleWalker<T> walker) throws Exception {
 			
   		throw ex;

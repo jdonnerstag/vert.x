@@ -25,8 +25,10 @@ import org.vertx.java.core.json.DecodeException;
 import org.vertx.java.core.json.JsonObject;
 import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
+import org.vertx.java.deploy.ModuleRepository;
 import org.vertx.java.deploy.impl.CommandLineArgs;
 import org.vertx.java.deploy.impl.DefaultModuleRepository;
+import org.vertx.java.deploy.impl.ModuleManager;
 import org.vertx.java.deploy.impl.VerticleManager;
 
 import java.io.File;
@@ -94,9 +96,11 @@ public class Starter {
 
   private void installModule(String modName, CommandLineArgs args) {
     String repo = args.map.get("-repo");
-    VerticleManager verticleManager = new VerticleManager(vertx, null, 
-    		new DefaultModuleRepository(vertx, repo));
-    verticleManager.moduleManager().installOne(modName);
+		ModuleRepository repository = new DefaultModuleRepository(vertx, repo);
+		ModuleManager moduleManager = new ModuleManager(vertx, null, repository);
+    VerticleManager verticleManager = new VerticleManager(vertx, moduleManager);
+    
+    verticleManager.moduleManager().install(modName);
   }
 
   private void uninstallModule(String modName) {
@@ -125,8 +129,9 @@ public class Starter {
     }
     
     String repo = args.map.get("-repo");
-    verticleManager = new VerticleManager(vertx, null, 
-    		new DefaultModuleRepository(vertx, repo));
+		ModuleRepository repository = new DefaultModuleRepository(vertx, repo);
+		ModuleManager moduleManager = new ModuleManager(vertx, null, repository);
+    verticleManager = new VerticleManager(vertx, moduleManager);
 
     boolean worker = args.map.get("-worker") != null;
 

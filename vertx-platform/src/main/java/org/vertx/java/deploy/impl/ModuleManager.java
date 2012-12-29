@@ -50,12 +50,22 @@ public class ModuleManager {
 	private static final String DEFAULT_MODULE_ROOT_DIR = "mods";
 	private static final String LIB_DIR = "lib";
 
-	private final VerticleManager verticleManager;
+	private final VertxInternal vertx; 
+	
 	private List<ModuleRepository> moduleRepositories = new ArrayList<>();
 
 	// The directory where modules will be downloaded to
 	private final File modRoot;
 
+	/**
+	 * Constructor
+	 * 
+	 * @param vertx
+	 */
+	public ModuleManager(final VertxInternal vertx) {
+		this(vertx, (File)null);
+	}
+	
 	/**
 	 * Constructor
 	 * 
@@ -65,15 +75,11 @@ public class ModuleManager {
 	 * @param repository
 	 *          Defaults to DEFAULT_REPO_HOST
 	 */
-	public ModuleManager(final VerticleManager verticleManager, final File modRoot, ModuleRepository... repos) {
-		this.verticleManager = Args.notNull(verticleManager, "verticleManager");
+	public ModuleManager(final VertxInternal vertx, final File modRoot, ModuleRepository... repos) {
+		this.vertx = Args.notNull(vertx, "vertx");
 		this.modRoot = initModRoot(modRoot);
 
 		initRepositories(repos);
-	}
-
-	public final VertxInternal vertx() {
-		return this.verticleManager.vertx();
 	}
 	
 	/**
@@ -117,7 +123,7 @@ public class ModuleManager {
 		}
 		
 		if (moduleRepositories().size() == 0) {
-			moduleRepositories().add(new DefaultModuleRepository(vertx(), null));
+			moduleRepositories().add(new DefaultModuleRepository(vertx, null));
 		}
 	}
 	
@@ -290,7 +296,7 @@ public class ModuleManager {
       log.error("Cannot find module directory to delete: " + modDir.getAbsolutePath());
     } else {
       try {
-        vertx().fileSystem().deleteSync(modDir.getAbsolutePath(), true);
+        vertx.fileSystem().deleteSync(modDir.getAbsolutePath(), true);
         log.info("Module " + modName + " successfully uninstalled (directory deleted)");
       } catch (Exception e) {
         log.error("Failed to delete directory: " + modDir.getAbsoluteFile(), e);

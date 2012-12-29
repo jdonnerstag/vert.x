@@ -32,6 +32,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.vertx.java.core.impl.DefaultVertx;
+import org.vertx.java.core.impl.VertxInternal;
 import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
 import org.vertx.java.deploy.ModuleRepository;
@@ -67,10 +68,8 @@ public class ModuleManagerTest {
 
 	@Before
 	public void setUp() throws Exception {
-		verticleManager = new VerticleManager(vertx, modDir.getRoot());
-		
-		moduleManager = new MyModuleManager(verticleManager, modDir.getRoot());
-		verticleManager.moduleManager(moduleManager);
+		moduleManager = new MyModuleManager(vertx, modDir.getRoot());
+		verticleManager = new VerticleManager(vertx, moduleManager);
 		assertSame(MyModuleManager.class, verticleManager.moduleManager().getClass());
 
 		moduleManager.moduleRepositories().clear();
@@ -173,8 +172,8 @@ public class ModuleManagerTest {
 
   	public final Map<String, VertxModule> sims = new HashMap<>();
   	
-		public MyModuleManager(VerticleManager verticleManager, File modRoot, ModuleRepository... repos) {
-			super(verticleManager, modRoot, repos);
+		public MyModuleManager(VertxInternal vertx, File modRoot, ModuleRepository... repos) {
+			super(vertx, modRoot, repos);
 		}
 
 		@Override

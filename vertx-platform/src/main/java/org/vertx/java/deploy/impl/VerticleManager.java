@@ -46,16 +46,16 @@ import org.vertx.java.core.impl.VertxThreadFactory;
 import org.vertx.java.core.json.JsonObject;
 import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
+import org.vertx.java.core.utils.lang.Args;
 import org.vertx.java.deploy.Container;
-import org.vertx.java.deploy.ModuleRepository;
 import org.vertx.java.deploy.Verticle;
 import org.vertx.java.deploy.VerticleFactory;
 
 /**
- *
  * This class could benefit from some refactoring
  *
  * @author <a href="http://tfox.org">Tim Fox</a>
+ * @author Juergen Donnerstag
  */
 public class VerticleManager implements ModuleReloader {
 
@@ -67,18 +67,20 @@ public class VerticleManager implements ModuleReloader {
   private final CountDownLatch stopLatch = new CountDownLatch(1);
   private Map<String, String> factoryNames = new HashMap<>();
   private final Redeployer redeployer;
-  private ModuleManager moduleManager;
+  private final ModuleManager moduleManager;
 
   public VerticleManager(VertxInternal vertx) {
-    this(vertx, (File) null);
+    this(vertx, new ModuleManager(vertx));
   }
-
-  public VerticleManager(VertxInternal vertx, File modDir, ModuleRepository... repos) {
-    this.vertx = vertx;
+  
+  public VerticleManager(VertxInternal vertx, ModuleManager moduleManager) {
+    this.vertx = Args.notNull(vertx, "vertx");
+    this.moduleManager = Args.notNull(moduleManager, "moduleManager");
+    
+    // TODO doesn't fit to explanation given in VertxLocator
     VertxLocator.vertx = vertx;
     VertxLocator.container = new Container(this);
     
-    this.moduleManager = new ModuleManager(this, modDir, repos);
     this.redeployer = new Redeployer(vertx, this.moduleManager.modRoot(), this);
     
     try (InputStream is = getClass().getClassLoader().getResourceAsStream("langs.properties")) {
@@ -104,11 +106,6 @@ public class VerticleManager implements ModuleReloader {
 
   public final ModuleManager moduleManager() {
   	return moduleManager;
-  }
-
-  public final VerticleManager moduleManager(ModuleManager moduleManager) {
-  	this.moduleManager = moduleManager;
-  	return this;
   }
   
   public void block() {

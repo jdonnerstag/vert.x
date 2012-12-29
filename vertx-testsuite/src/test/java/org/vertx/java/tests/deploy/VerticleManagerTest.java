@@ -29,7 +29,9 @@ import org.vertx.java.core.impl.DefaultVertx;
 import org.vertx.java.core.impl.VertxInternal;
 import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
+import org.vertx.java.deploy.ModuleRepository;
 import org.vertx.java.deploy.impl.DefaultModuleRepository;
+import org.vertx.java.deploy.impl.ModuleManager;
 import org.vertx.java.deploy.impl.VerticleManager;
 
 /**
@@ -81,7 +83,10 @@ public class VerticleManagerTest {
   
   @Test
   public void testDoInstallModuleWithRepo() throws Exception {
-    verticleManager = new VerticleManager(vertx, null, new DefaultModuleRepository(vertx, "localhost:9093"));
+		ModuleRepository repository = new DefaultModuleRepository(vertx, "localhost:9093");
+		ModuleManager moduleManager = new ModuleManager(vertx, null, repository);
+    verticleManager = new VerticleManager(vertx, moduleManager);
+    
     AsyncResult<Void> res = verticleManager.moduleManager().installOne(TEST_MODULE2);
     assertNotNull(res);
     assertTrue(res.succeeded());

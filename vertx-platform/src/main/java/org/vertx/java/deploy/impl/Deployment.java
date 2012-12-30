@@ -27,20 +27,46 @@ import java.util.List;
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
 public class Deployment {
+	// Every deployment has a unique name
   public final String name;
+  
+  // One module can be associated with a deployment
+  // (A module may have dependencies on other modules)
+  // TODO replace with VertxModule
   public final String modName;
+
+  // Number of instances of the same Verticle that are started 
+  // on (hopefully) different threads
   public final int instances;
+  
+  // Module config
+  // TODO replace with VertxModule
   public final JsonObject config;
+
+  // Module classpath
+  // TODO replace with VertxModule
   public final URI[] urls;
+  
+  // Mpdule directory
+  // TODO replace with VertxModule
   public final File modDir;
+
+  // One holder for each instance
   public final List<VerticleHolder> verticles = new ArrayList<>();
+
+  // Deployment tree
   public final List<String> childDeployments = new ArrayList<>();
   public final String parentDeploymentName;
+  
+  // ??
   public final boolean autoRedeploy;
 
-  public Deployment(String name, String modName, int instances, JsonObject config,
-             URI[] urls, File modDir, String parentDeploymentName,
-             boolean autoRedeploy) {
+  /**
+   * Constructor
+   */
+  public Deployment(final String name, final String modName, final int instances, 
+  		final JsonObject config, final URI[] urls, final File modDir, 
+  		final String parentDeploymentName, final boolean autoRedeploy) {
     this.name = name;
     this.modName = modName;
     this.instances = instances;

@@ -16,40 +16,38 @@
 
 package org.vertx.java.deploy.impl;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 import org.vertx.java.core.Handler;
 import org.vertx.java.core.impl.Context;
 
 /**
  * @author <a href="http://tfox.org">Tim Fox</a>
+ * @author Juergen Donnerstag
  */
 public class CountingCompletionHandler {
 
   private final Context context;
+  private final AtomicInteger count = new AtomicInteger(0);
+  private final AtomicInteger required = new AtomicInteger(0);
+  private final Handler<?> doneHandler;
 
-  CountingCompletionHandler(Context context) {
+  public CountingCompletionHandler(Context context, Handler<?> doneHandler) {
     this.context = context;
-  }
-
-  int count;
-  int required;
-  Handler<Void> doneHandler;
-
-  synchronized void complete() {
-    count++;
-    checkDone();
-  }
-
-  synchronized void incRequired() {
-    required++;
-  }
-
-  synchronized void setHandler(Handler<Void> doneHandler) {
     this.doneHandler = doneHandler;
+  }
+
+  public final void incCompleted() {
+    count.incrementAndGet();
     checkDone();
   }
 
-  void checkDone() {
-    if (doneHandler != null && count == required) {
+  public final void incRequired() {
+    required.incrementAndGet();
+  }
+
+  public final void checkDone() {
+    if (doneHandler != null && count.get() == required.get()) {
       context.execute(new Runnable() {
         public void run() {
           doneHandler.handle(null);

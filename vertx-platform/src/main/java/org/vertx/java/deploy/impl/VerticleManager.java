@@ -297,7 +297,9 @@ public class VerticleManager implements ModuleReloader {
   }
 
   public synchronized void undeployAll(final Handler<Void> doneHandler) {
-    final CountingCompletionHandler count = new CountingCompletionHandler(vertx.getOrAssignContext());
+    final CountingCompletionHandler count = new CountingCompletionHandler(
+    		vertx.getOrAssignContext(), doneHandler);
+    
     if (!deployments.isEmpty()) {
       // We do it this way since undeploy is itself recursive - we don't want
       // to attempt to undeploy the same verticle twice if it's a child of
@@ -307,12 +309,11 @@ public class VerticleManager implements ModuleReloader {
         count.incRequired();
         undeploy(name, new SimpleHandler() {
           public void handle() {
-            count.complete();
+            count.incCompleted();
           }
         });
       }
     }
-    count.setHandler(doneHandler);
   }
 
   public synchronized Map<String, Integer> listInstances() {
@@ -347,23 +348,22 @@ public class VerticleManager implements ModuleReloader {
     }
   }
 
-  private final void doDeploy(String depName,
-                          boolean autoRedeploy,
-                          boolean worker, final String main,
-                          final String modName,
-                          final JsonObject config, final URI[] uris,
-                          int instances,
-                          final File modDir,
-                          final Handler<String> doneHandler) {
+  private final void doDeploy(final String depName, final boolean autoRedeploy, final boolean worker, 
+  		final String main, final String modName, final JsonObject config, final URI[] uris, 
+  		final int instances, final File modDir, final Handler<String> doneHandler) {
+  	
     checkWorkerContext();
+
     final String deploymentName =
         depName != null ? depName : "deployment-" + UUID.randomUUID().toString();
 
-    log.debug("Deploying name : " + deploymentName + " main: " + main +
-        " instances: " + instances);
+    if (log.isDebugEnabled()) {
+	    log.debug("Deploying name: " + deploymentName + " main: " + main +
+	        " instances: " + instances);
+    }
 
     int dotIndex = main.lastIndexOf('.');
-    String extension = dotIndex > -1 ? main.substring(dotIndex + 1) : null;
+    String extension = dotIndex != -1 ? main.substring(dotIndex + 1) : null;
     String factoryName = null;
     if (extension != null) {
       factoryName = factoryNames.get(extension);
@@ -376,8 +376,6 @@ public class VerticleManager implements ModuleReloader {
       }
     }
 
-    final int instCount = instances;
-
     class AggHandler {
       AtomicInteger count = new AtomicInteger(0);
       boolean failed;
@@ -386,7 +384,7 @@ public class VerticleManager implements ModuleReloader {
         if (!res) {
           failed = true;
         }
-        if (count.incrementAndGet() == instCount) {
+        if (count.incrementAndGet() == instances) {
           String deploymentID = failed ? null : deploymentName;
           callDoneHandler(doneHandler, deploymentID);
         }
@@ -405,21 +403,13 @@ public class VerticleManager implements ModuleReloader {
       parent.childDeployments.add(deploymentName);
     }
 
-    // Convert URI into URL
-    final URL[] urls = new URL[uris.length];
-    for (int i=0; i < urls.length; i++) {
-    	try {
-				urls[i] = uris[i].toURL();
-			} catch (MalformedURLException ex) {
-				log.error("URI to URL converion error", ex);
-			}
-    }
+    URL[] urls = uriArrayToUrlArray(uris);
     
     // Workers share a single classloader with all instances in a deployment - this
     // enables them to use libraries that rely on caching or statics to share state
     // (e.g. JDBC connection pools)
     @SuppressWarnings("resource")
-		final ClassLoader sharedLoader = worker ? new ParentLastURLClassLoader(urls, getClass().getClassLoader()): null;
+		final ClassLoader sharedLoader = worker ? new ParentLastURLClassLoader(urls, getClass().getClassLoader()) : null;
 
     for (int i = 0; i < instances; i++) {
       // Launch the verticle instance
@@ -433,7 +423,7 @@ public class VerticleManager implements ModuleReloader {
       try {
         clazz = cl.loadClass(factoryName);
       } catch (ClassNotFoundException e) {
-        log.error("Cannot find class " + factoryName + " to load");
+        log.error("Cannot find class " + factoryName + " to load", e);
         callDoneHandler(doneHandler, null);
         return;
       }
@@ -442,7 +432,7 @@ public class VerticleManager implements ModuleReloader {
       try {
         verticleFactory = (VerticleFactory)clazz.newInstance();
       } catch (Exception e) {
-        log.error("Failed to instantiate VerticleFactory: " + e.getMessage());
+        log.error("Failed to instantiate VerticleFactory: " + clazz.getName(), e);
         callDoneHandler(doneHandler, null);
         return;
       }
@@ -453,18 +443,15 @@ public class VerticleManager implements ModuleReloader {
         public void run() {
 
           Verticle verticle = null;
-          boolean error = true;
-
           try {
             verticle = verticleFactory.createVerticle(main, cl);
-            error = false;
           } catch (ClassNotFoundException e) {
-            log.error("Cannot find verticle " + main);
+            log.error("Cannot find verticle " + main, e);
           } catch (Throwable t) {
             log.error("Failed to create verticle", t);
           }
 
-          if (error) {
+          if (verticle == null) {
             doUndeploy(deploymentName, new SimpleHandler() {
               public void handle() {
                 aggHandler.done(false);
@@ -473,7 +460,7 @@ public class VerticleManager implements ModuleReloader {
             return;
           }
 
-          //Inject vertx
+          // Inject vertx
           verticle.setVertx(vertx);
           verticle.setContainer(new Container(VerticleManager.this));
 
@@ -485,7 +472,6 @@ public class VerticleManager implements ModuleReloader {
             verticle.start();
             aggHandler.done(true);
           } catch (Throwable t) {
-            t.printStackTrace();
             vertx.reportException(t);
             doUndeploy(deploymentName, new SimpleHandler() {
               public void handle() {
@@ -505,15 +491,26 @@ public class VerticleManager implements ModuleReloader {
     }
   }
 
-  // Must be synchronized since called directly from different thread
-  private void addVerticle(Deployment deployment, Verticle verticle,
-                                        VerticleFactory factory) {
+	private URL[] uriArrayToUrlArray(final URI[] uris) {
+    final URL[] urls = new URL[uris.length];
+    for (int i=0; i < urls.length; i++) {
+    	try {
+				urls[i] = uris[i].toURL();
+			} catch (MalformedURLException ex) {
+				log.error("URI to URL conversion error", ex);
+			}
+    }
+		return urls;
+	}
+
+  private void addVerticle(final Deployment deployment, final Verticle verticle, 
+  		final VerticleFactory factory) {
+  	
     String loggerName = "org.vertx.deployments." + deployment.name + "-" + deployment.verticles.size();
     Logger logger = LoggerFactory.getLogger(loggerName);
     Context context = vertx.getContext();
-    VerticleHolder holder = new VerticleHolder(deployment, context, verticle,
-                                               loggerName, logger, deployment.config,
-                                               factory);
+    VerticleHolder holder = new VerticleHolder(deployment, context, 
+    		verticle, loggerName, logger, deployment.config, factory);
     deployment.verticles.add(holder);
     context.setDeploymentHandle(holder);
   }
@@ -528,41 +525,50 @@ public class VerticleManager implements ModuleReloader {
     }
   }
 
+  /**
+   * Undeploy the Deployment
+   */
   private void doUndeploy(String name, final Handler<Void> doneHandler) {
-     CountingCompletionHandler count = new CountingCompletionHandler(vertx.getOrAssignContext());
+     CountingCompletionHandler count = new CountingCompletionHandler(vertx.getOrAssignContext(), doneHandler);
      doUndeploy(name, count);
-     if (doneHandler != null) {
-       count.setHandler(doneHandler);
-     }
   }
 
-  private void doUndeploy(String name, final CountingCompletionHandler count) {
-
+  /**
+   * Undeploy the Deployment
+   */
+  private void doUndeploy(final String name, final CountingCompletionHandler count) {
+  	log.info("Undeploy Deployment: " + name);
+  	
     final Deployment deployment = deployments.remove(name);
-
+    if (deployment == null) {
+    	log.error("Deployment not found. Already undeployed?? Name: " + name);
+    	return;
+    }
+    
     // Depth first - undeploy children first
     for (String childDeployment: deployment.childDeployments) {
       doUndeploy(childDeployment, count);
     }
 
-    if (!deployment.verticles.isEmpty()) {
-      for (final VerticleHolder holder: deployment.verticles) {
-        count.incRequired();
-        holder.context.execute(new Runnable() {
-          public void run() {
-            try {
-              holder.verticle.stop();
-            } catch (Throwable t) {
-              vertx.reportException(t);
-            }
-            count.complete();
-            LoggerFactory.removeLogger(holder.loggerName);
-            holder.context.runCloseHooks();
+    // Stop all instances of the Verticle
+    for (final VerticleHolder holder: deployment.verticles) {
+      count.incRequired();
+      holder.context.execute(new Runnable() {
+        public void run() {
+          try {
+            holder.verticle.stop();
+          } catch (Throwable t) {
+          	// Vertx -> Context -> VerticleHolder -> VerticleFactory.reportException(t)
+            vertx.reportException(t);
           }
-        });
-      }
+          holder.context.runCloseHooks();
+          LoggerFactory.removeLogger(holder.loggerName);
+          count.incCompleted();
+        }
+      });
     }
 
+    // Remove deployment from parent child list
     if (deployment.parentDeploymentName != null) {
       Deployment parent = deployments.get(deployment.parentDeploymentName);
       if (parent != null) {
@@ -571,7 +577,11 @@ public class VerticleManager implements ModuleReloader {
     }
   }
 
+  /**
+   * First undeploy all Deployments provided, than redeploy them
+   */
   public void reloadModules(final Set<Deployment> deps) {
+  	// TODO change to first undeploy all, than reploy all again 
     for (final Deployment deployment: deps) {
       if (deployments.containsKey(deployment.name)) {
         doUndeploy(deployment.name, new SimpleHandler() {
@@ -587,12 +597,20 @@ public class VerticleManager implements ModuleReloader {
     }
   }
 
+  /**
+   * (Async) Undeploy the Deployment
+   */
   public synchronized void undeploy(String name, final Handler<Void> doneHandler) {
     final Deployment dep = deployments.get(name);
     if (dep == null) {
-      throw new IllegalArgumentException("There is no deployment with name " + name);
+      log.error("Failed to undeploy. There is no deployment with name: " + name);
+      if (doneHandler != null) {
+        doneHandler.handle(null);
+      }
+      return;
     }
-    Handler<Void> wrappedHandler = new SimpleHandler() {
+    
+    doUndeploy(name, new SimpleHandler() {
       public void handle() {
         if (dep.modName != null && dep.autoRedeploy) {
           redeployer.moduleUndeployed(dep);
@@ -601,10 +619,14 @@ public class VerticleManager implements ModuleReloader {
           doneHandler.handle(null);
         }
       }
-    };
-    doUndeploy(name, wrappedHandler);
+    });
   }
 
+  /**
+   * (Async) (Re-)deploy the Deployment
+   * 
+   * @param deployment
+   */
   private void redeploy(final Deployment deployment) {
     // Has to occur on a worker thread
     BlockingAction<String> redeployAction = new BlockingAction<String>(vertx) {

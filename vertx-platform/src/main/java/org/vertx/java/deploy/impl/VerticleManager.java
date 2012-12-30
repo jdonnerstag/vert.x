@@ -31,13 +31,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.vertx.java.core.AsyncResult;
 import org.vertx.java.core.Handler;
 import org.vertx.java.core.SimpleHandler;
+import org.vertx.java.core.impl.ActionFuture;
 import org.vertx.java.core.impl.BlockingAction;
 import org.vertx.java.core.impl.Context;
 import org.vertx.java.core.impl.VertxInternal;
@@ -58,7 +58,9 @@ import org.vertx.java.deploy.VerticleFactory;
  */
 public class VerticleManager implements ModuleReloader {
 
-  private static final Logger log = LoggerFactory.getLogger(VerticleManager.class);
+	private static final Logger log = LoggerFactory.getLogger(VerticleManager.class);
+
+  public static final String LANGS_PROPERTIES_FILE_NAME = "langs.properties";
 
   private final VertxInternal vertx;
   private final Deployments deployments = new Deployments();
@@ -74,17 +76,24 @@ public class VerticleManager implements ModuleReloader {
   public VerticleManager(VertxInternal vertx, ModuleManager moduleManager) {
     this.vertx = Args.notNull(vertx, "vertx");
     this.moduleManager = Args.notNull(moduleManager, "moduleManager");
+    this.redeployer = newRedeployer(vertx, this.moduleManager.modRoot());
+
+    initFactoryNames(factoryNames);
     
     // TODO doesn't fit the explanation given in VertxLocator
     VertxLocator.vertx = vertx;
     VertxLocator.container = new Container(this);
-    
-    this.redeployer = new Redeployer(vertx, this.moduleManager.modRoot(), this);
+  }
 
-    // TODO change to use VertxConfig
-    try (InputStream is = getClass().getClassLoader().getResourceAsStream("langs.properties")) {
+	protected Redeployer newRedeployer(final VertxInternal vertx, final File modRoot) {
+		return new Redeployer(vertx, modRoot, this);
+	}
+
+	protected void initFactoryNames(final Map<String, String> factoryNames) {
+		// TODO change to use VertxConfig
+    try (InputStream is = getClass().getClassLoader().getResourceAsStream(LANGS_PROPERTIES_FILE_NAME)) {
       if (is == null) {
-        log.warn("No language mappings found!");
+        log.warn("No language mappings found: file: " + LANGS_PROPERTIES_FILE_NAME);
       } else {
         Properties props = new Properties();
         props.load(new BufferedInputStream(is));
@@ -95,9 +104,9 @@ public class VerticleManager implements ModuleReloader {
         }
       }
     } catch (IOException e) {
-      log.error("Failed to load langs.properties: " + e.getMessage());
+      log.error("Failed to load language properties from: " + LANGS_PROPERTIES_FILE_NAME, e);
     }
-  }
+	}
 
   public final Redeployer redeployer() {
   	return redeployer;
@@ -147,11 +156,12 @@ public class VerticleManager implements ModuleReloader {
     return holder == null ? null : holder.logger;
   }
 
-  public void deployVerticle(final boolean worker, final String main,
-                             final JsonObject config, final URI[] urls,
-                             final int instances, final File currentModDir,
-                             final String includes,
-                             final Handler<String> doneHandler) {
+  /**
+   * (Sync) Deploy ...
+   */
+  public ActionFuture<Void> deployVerticle(final boolean worker, final String main, final JsonObject config, 
+  		final URI[] urls, final int instances, final File currentModDir, final String includes,
+  		final Handler<String> doneHandler) {
 
     BlockingAction<Void> deployModuleAction = new BlockingAction<Void>(vertx, null) {
       @Override
@@ -162,7 +172,7 @@ public class VerticleManager implements ModuleReloader {
       }
     };
 
-    deployModuleAction.run();
+    return deployModuleAction.run();
   }
 
   private Handler<String> wrapDoneHandler(final Handler<String> doneHandler) {
@@ -186,12 +196,15 @@ public class VerticleManager implements ModuleReloader {
     };
   }
 
-  private boolean doDeployVerticle(boolean worker, final String main,
-                                   final JsonObject config, final URI[] urls,
-                                   int instances, File currentModDir,
-                                   String includes, Handler<String> doneHandler)
-  {
-    checkWorkerContext();
+  /**
+   * (Async) Deploy ...
+   */
+  private boolean doDeployVerticle(boolean worker, final String main, final JsonObject config, 
+  		final URI[] urls, final int instances, final File currentModDir, final String includes, 
+  		final Handler<String> doneHandler) {
+
+  	checkWorkerContext();
+
     ModuleDependencies pdata = new ModuleDependencies(main, urls);
     URI[] theURLs;
     // The user has specified a list of modules to include when deploying this verticle
@@ -341,16 +354,18 @@ public class VerticleManager implements ModuleReloader {
   	
     checkWorkerContext();
 
-    // TODO move into Deployment
-    final String deploymentName =
-        depName != null ? depName : "deployment-" + UUID.randomUUID().toString();
+    String factoryName = getLanguageFactoryName(main);
 
+    String parentDeploymentName = getDeploymentName();
+    final Deployment deployment = new Deployment(depName, modName, instances,
+        config, uris, modDir, parentDeploymentName, autoRedeploy);
+    
     if (log.isInfoEnabled()) {
-	    log.info("New Deployment: " + deploymentName + "; main: " + main +
+	    log.info("New Deployment: " + deployment.name + "; main: " + main +
 	        "; instances: " + instances);
     }
 
-    String factoryName = getLanguageFactoryName(main);
+    deployments.put(parentDeploymentName, deployment.name, deployment);
 
     class AggHandler {
       AtomicInteger count = new AtomicInteger(0);
@@ -361,7 +376,7 @@ public class VerticleManager implements ModuleReloader {
           failed = true;
         }
         if (count.incrementAndGet() == instances) {
-          String deploymentID = failed ? null : deploymentName;
+          String deploymentID = failed ? null : deployment.name;
           callDoneHandler(doneHandler, deploymentID);
         }
       }
@@ -369,16 +384,10 @@ public class VerticleManager implements ModuleReloader {
 
     final AggHandler aggHandler = new AggHandler();
 
-    String parentDeploymentName = getDeploymentName();
-    final Deployment deployment = new Deployment(deploymentName, modName, instances,
-        config, uris, modDir, parentDeploymentName, autoRedeploy);
-    deployments.put(parentDeploymentName, deploymentName, deployment);
-
-    URL[] urls = uriArrayToUrlArray(uris);
-    
     // Workers share a single classloader with all instances in a deployment - this
     // enables them to use libraries that rely on caching or statics to share state
     // (e.g. JDBC connection pools)
+    URL[] urls = uriArrayToUrlArray(uris);
     @SuppressWarnings("resource")
 		final ClassLoader sharedLoader = worker ? new ParentLastURLClassLoader(urls, getClass().getClassLoader()) : null;
 
@@ -389,26 +398,11 @@ public class VerticleManager implements ModuleReloader {
 
       // We load the VerticleFactory class using the verticle classloader - this allows
       // us to put language implementations in modules
-
-      Class<?> clazz;
-      try {
-        clazz = cl.loadClass(factoryName);
-      } catch (ClassNotFoundException e) {
-        log.error("Cannot find class " + factoryName + " to load", e);
+      final VerticleFactory verticleFactory = getVerticleFactory(cl, factoryName, doneHandler);
+      if (verticleFactory == null) {
         callDoneHandler(doneHandler, null);
-        return;
+      	return;
       }
-
-      final VerticleFactory verticleFactory;
-      try {
-        verticleFactory = (VerticleFactory)clazz.newInstance();
-      } catch (Exception e) {
-        log.error("Failed to instantiate VerticleFactory: " + clazz.getName(), e);
-        callDoneHandler(doneHandler, null);
-        return;
-      }
-
-      verticleFactory.init(this);
 
       Runnable runner = new Runnable() {
         public void run() {
@@ -416,14 +410,12 @@ public class VerticleManager implements ModuleReloader {
           Verticle verticle = null;
           try {
             verticle = verticleFactory.createVerticle(main, cl);
-          } catch (ClassNotFoundException e) {
-            log.error("Cannot find verticle " + main, e);
-          } catch (Throwable t) {
-            log.error("Failed to create verticle", t);
+          } catch (Exception e) {
+            log.error("Failed to create verticle: " + main, e);
           }
 
           if (verticle == null) {
-            doUndeploy(deploymentName, new SimpleHandler() {
+            doUndeploy(deployment.name, new SimpleHandler() {
               public void handle() {
                 aggHandler.done(false);
               }
@@ -444,13 +436,12 @@ public class VerticleManager implements ModuleReloader {
             aggHandler.done(true);
           } catch (Throwable t) {
             vertx.reportException(t);
-            doUndeploy(deploymentName, new SimpleHandler() {
+            doUndeploy(deployment.name, new SimpleHandler() {
               public void handle() {
                 aggHandler.done(false);
               }
             });
           }
-
         }
       };
 
@@ -462,6 +453,22 @@ public class VerticleManager implements ModuleReloader {
     }
   }
 
+  private VerticleFactory getVerticleFactory(final ClassLoader cl, 
+  		final String factoryName, final Handler<String> doneHandler) {
+
+   	Class<?> clazz = null;
+    try {
+     	clazz = cl.loadClass(factoryName);
+    	VerticleFactory factory = (VerticleFactory)clazz.newInstance();
+      factory.init(this);
+      return factory;
+    } catch (Exception e) {
+      String clazzName = (clazz != null ? clazz.getName() : "<unknown>");
+      log.error("Failed to instantiate VerticleFactory: " + factoryName + "; class: " + clazzName, e);
+    }
+    return null;
+  }
+  
 	private String getLanguageFactoryName(final String main) {
 		int dotIndex = main.lastIndexOf('.');
     String extension = dotIndex != -1 ? main.substring(dotIndex + 1) : null;
@@ -594,7 +601,7 @@ public class VerticleManager implements ModuleReloader {
   /**
    * (Async) Undeploy the Deployment
    */
-  public synchronized void undeploy(String name, final Handler<Void> doneHandler) {
+  public void undeploy(final String name, final Handler<Void> doneHandler) {
     final Deployment dep = deployments.get(name);
     if (dep == null) {
       log.error("Failed to undeploy. There is no deployment with name: " + name);
@@ -621,23 +628,18 @@ public class VerticleManager implements ModuleReloader {
    * 
    * @param deployment
    */
-  private void redeploy(final Deployment deployment) {
+  private ActionFuture<Void> redeploy(final Deployment deployment) {
     // Has to occur on a worker thread
-    BlockingAction<String> redeployAction = new BlockingAction<String>(vertx) {
+    BlockingAction<Void> redeployAction = new BlockingAction<Void>(vertx) {
       @Override
-      public String action() throws Exception {
-        doDeployMod(true, deployment.name, deployment.modName, deployment.config, deployment.instances,
-            null, null);
+      public Void action() throws Exception {
+      	// TODO need to have currentModDir in deployment
+        doDeployMod(deployment.autoRedeploy, deployment.name, deployment.modName, deployment.config, 
+        		deployment.instances, null, null);
         return null;
       }
-      @Override
-      protected void handle(AsyncResult<String> result) {
-        if (!result.succeeded()) {
-          log.error(result.exception);
-        }
-      }
     };
-    redeployAction.run();
+    return redeployAction.run();
   }
 
   public void stop() {

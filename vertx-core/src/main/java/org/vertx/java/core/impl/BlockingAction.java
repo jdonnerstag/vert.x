@@ -169,6 +169,9 @@ public abstract class BlockingAction<T> {
 	 * @param result
 	 */
 	protected void handle(final AsyncResult<T> result) {
+    if (result != null && result.failed()) {
+      log.error("BlockingAction failed", result.exception);
+    }
 	}
 
 	/**

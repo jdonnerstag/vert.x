@@ -254,7 +254,7 @@ public class TestBase extends TestCase {
 
   protected void stopApp(String appName) throws Exception {
     final CountDownLatch latch = new CountDownLatch(1);
-    int instances = verticleManager.listInstances().get(appName);
+    int instances = verticleManager.deployment(appName).verticles.size();
     verticleManager.undeploy(appName, new SimpleHandler() {
       public void handle() {
         latch.countDown();

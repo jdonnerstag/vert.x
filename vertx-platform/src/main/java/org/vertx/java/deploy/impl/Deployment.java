@@ -22,6 +22,7 @@ import java.io.File;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * @author <a href="http://tfox.org">Tim Fox</a>
@@ -67,13 +68,26 @@ public class Deployment {
   public Deployment(final String name, final String modName, final int instances, 
   		final JsonObject config, final URI[] urls, final File modDir, 
   		final String parentDeploymentName, final boolean autoRedeploy) {
-    this.name = name;
+    this.name = (name != null ? name : createName());
     this.modName = modName;
     this.instances = instances;
-    this.config = config;
+    this.config = (config == null ? new JsonObject() : config.copy());
     this.urls = urls;
     this.modDir = modDir;
     this.parentDeploymentName = parentDeploymentName;
     this.autoRedeploy = autoRedeploy;
+  }
+
+  /**
+   * Extension point: 
+   * 
+   * @return
+   */
+  protected String createName() {
+    return "deployment-" + UUID.randomUUID().toString();
+  }
+  
+  public final boolean hasParent() {
+  	return parentDeploymentName != null;
   }
 }

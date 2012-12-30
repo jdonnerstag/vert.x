@@ -32,7 +32,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -62,8 +61,7 @@ public class VerticleManager implements ModuleReloader {
   private static final Logger log = LoggerFactory.getLogger(VerticleManager.class);
 
   private final VertxInternal vertx;
-  // deployment name --> deployment
-  private final Map<String, Deployment> deployments = new ConcurrentHashMap<>();
+  private final Deployments deployments = new Deployments();
   private final CountDownLatch stopLatch = new CountDownLatch(1);
   private Map<String, String> factoryNames = new HashMap<>();
   private final Redeployer redeployer;
@@ -216,13 +214,8 @@ public class VerticleManager implements ModuleReloader {
   }
 
 	/**
-	 * Deploy a Module (async)
+	 * (Async) Deploy a Module
 	 * 
-	 * @param modName
-	 * @param config
-	 * @param instances
-	 * @param currentModDir
-	 * @param doneHandler
 	 * TODO could be improved to return the Future
 	 */
 	public final void deployMod(final String modName, final JsonObject config, final int instances,
@@ -248,15 +241,7 @@ public class VerticleManager implements ModuleReloader {
   }
 
 	/**
-	 * Deploy a Module (sync)
-	 * 
-	 * @param redeploy
-	 * @param depName
-	 * @param modName
-	 * @param config
-	 * @param instances
-	 * @param currentModDir
-	 * @param doneHandler
+	 * (Sync) Deploy a Module
 	 */
   public void doDeployMod(final boolean redeploy, final String depName, final String modName,
   		final JsonObject config, final int instances, final File currentModDir,
@@ -296,32 +281,30 @@ public class VerticleManager implements ModuleReloader {
     		deps.urisToArray(), instances, modDirToUse, doneHandler);
   }
 
+  /**
+   * Undeploy all Deployments
+   * 
+   * @param doneHandler
+   */
   public synchronized void undeployAll(final Handler<Void> doneHandler) {
     final CountingCompletionHandler count = new CountingCompletionHandler(
     		vertx.getOrAssignContext(), doneHandler);
     
-    if (!deployments.isEmpty()) {
-      // We do it this way since undeploy is itself recursive - we don't want
-      // to attempt to undeploy the same verticle twice if it's a child of
-      // another
-      while (!deployments.isEmpty()) {
-        String name = deployments.keySet().iterator().next();
-        count.incRequired();
-        undeploy(name, new SimpleHandler() {
-          public void handle() {
-            count.incCompleted();
-          }
-        });
-      }
+    for(String name: deployments) {
+    	// Already deployed?
+    	if (deployments.get(name) != null) { 
+	      count.incRequired();
+	      undeploy(name, new SimpleHandler() {
+	        public void handle() {
+	          count.incCompleted();
+	        }
+	      });
+    	}
     }
   }
 
-  public synchronized Map<String, Integer> listInstances() {
-    Map<String, Integer> map = new HashMap<>();
-    for (Map.Entry<String, Deployment> entry: deployments.entrySet()) {
-      map.put(entry.getKey(), entry.getValue().verticles.size());
-    }
-    return map;
+  public final Deployment deployment(String name) {
+    return deployments.get(name);
   }
 
   private void checkWorkerContext() {
@@ -348,33 +331,26 @@ public class VerticleManager implements ModuleReloader {
     }
   }
 
+  /**
+   * Deploy
+   */
+  // TODO wouldn't it be easier to pass a Deployment? Or something like a DeploymentBuilder?
   private final void doDeploy(final String depName, final boolean autoRedeploy, final boolean worker, 
   		final String main, final String modName, final JsonObject config, final URI[] uris, 
   		final int instances, final File modDir, final Handler<String> doneHandler) {
   	
     checkWorkerContext();
 
+    // TODO move into Deployment
     final String deploymentName =
         depName != null ? depName : "deployment-" + UUID.randomUUID().toString();
 
-    if (log.isDebugEnabled()) {
-	    log.debug("Deploying name: " + deploymentName + " main: " + main +
-	        " instances: " + instances);
+    if (log.isInfoEnabled()) {
+	    log.info("New Deployment: " + deploymentName + "; main: " + main +
+	        "; instances: " + instances);
     }
 
-    int dotIndex = main.lastIndexOf('.');
-    String extension = dotIndex != -1 ? main.substring(dotIndex + 1) : null;
-    String factoryName = null;
-    if (extension != null) {
-      factoryName = factoryNames.get(extension);
-    }
-    if (factoryName == null) {
-      // Use the default
-      factoryName = factoryNames.get("default");
-      if (factoryName == null) {
-        throw new IllegalArgumentException("No language mapping found and no default specified in langs.properties");
-      }
-    }
+    String factoryName = getLanguageFactoryName(main);
 
     class AggHandler {
       AtomicInteger count = new AtomicInteger(0);
@@ -395,13 +371,8 @@ public class VerticleManager implements ModuleReloader {
 
     String parentDeploymentName = getDeploymentName();
     final Deployment deployment = new Deployment(deploymentName, modName, instances,
-        config == null ? new JsonObject() : config.copy(), uris, modDir, parentDeploymentName,
-        autoRedeploy);
-    deployments.put(deploymentName, deployment);
-    if (parentDeploymentName != null) {
-      Deployment parent = deployments.get(parentDeploymentName);
-      parent.childDeployments.add(deploymentName);
-    }
+        config, uris, modDir, parentDeploymentName, autoRedeploy);
+    deployments.put(parentDeploymentName, deploymentName, deployment);
 
     URL[] urls = uriArrayToUrlArray(uris);
     
@@ -491,6 +462,23 @@ public class VerticleManager implements ModuleReloader {
     }
   }
 
+	private String getLanguageFactoryName(final String main) {
+		int dotIndex = main.lastIndexOf('.');
+    String extension = dotIndex != -1 ? main.substring(dotIndex + 1) : null;
+    String factoryName = null;
+    if (extension != null) {
+      factoryName = factoryNames.get(extension);
+    }
+    if (factoryName == null) {
+      // Use the default
+      factoryName = factoryNames.get("default");
+      if (factoryName == null) {
+        throw new IllegalArgumentException("No language mapping found and no default specified in langs.properties");
+      }
+    }
+		return factoryName;
+	}
+
 	private URL[] uriArrayToUrlArray(final URI[] uris) {
     final URL[] urls = new URL[uris.length];
     for (int i=0; i < urls.length; i++) {
@@ -547,6 +535,9 @@ public class VerticleManager implements ModuleReloader {
     
     // Depth first - undeploy children first
     for (String childDeployment: deployment.childDeployments) {
+    	if (log.isDebugEnabled()) {
+    		log.debug("Undeploy child: " + childDeployment);
+    	}
       doUndeploy(childDeployment, count);
     }
 
@@ -563,6 +554,9 @@ public class VerticleManager implements ModuleReloader {
           }
           holder.context.runCloseHooks();
           LoggerFactory.removeLogger(holder.loggerName);
+        	if (log.isDebugEnabled()) {
+        		log.debug("Undeployment completed: " + name);
+        	}
           count.incCompleted();
         }
       });
@@ -583,7 +577,7 @@ public class VerticleManager implements ModuleReloader {
   public void reloadModules(final Set<Deployment> deps) {
   	// TODO change to first undeploy all, than reploy all again 
     for (final Deployment deployment: deps) {
-      if (deployments.containsKey(deployment.name)) {
+      if (deployments.get(deployment.name) != null) {
         doUndeploy(deployment.name, new SimpleHandler() {
           public void handle() {
             redeploy(deployment);

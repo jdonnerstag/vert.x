@@ -19,12 +19,17 @@ package org.vertx.java.deploy.impl;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.vertx.java.core.logging.Logger;
+import org.vertx.java.core.logging.impl.LoggerFactory;
+
 /**
  * Parses args of the form -x y
  *
  * @author <a href="http://tfox.org">Tim Fox</a>
  */
 public class CommandLineArgs {
+
+  private static final Logger log = LoggerFactory.getLogger(CommandLineArgs.class);
 
   public final Map<String, String> map = new HashMap<>();
 
@@ -49,18 +54,34 @@ public class CommandLineArgs {
     }
   }
 
-  public int getInt(String argName) {
+  public int getInt(String argName, int def, int err) {
     String arg = map.get(argName);
-    int val;
+    int val = def;
     if (arg != null) {
       try {
         val = Integer.parseInt(arg.trim());
       } catch (NumberFormatException e) {
-        throw new IllegalArgumentException("Invalid " + argName + ": " + arg);
+        log.error(e);
+        val = err;
       }
-    } else {
-      val = -1;
     }
     return val;
+  }
+  
+  public String get(String argName) {
+  	return map.get(argName);
+  }
+  
+  public String get(String argName, String def) {
+  	String val = map.get(argName);
+  	return (val == null ? def : val);
+  }
+  
+  public boolean present(String argName) {
+  	return map.get(argName) != null;
+  }
+  
+  public int size() {
+  	return map.size();
   }
 }

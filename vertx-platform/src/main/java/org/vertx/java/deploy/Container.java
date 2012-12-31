@@ -23,6 +23,7 @@ import org.vertx.java.deploy.impl.VerticleManager;
 
 import java.io.File;
 import java.net.URI;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -87,7 +88,7 @@ public class Container {
    * @param doneHandler The handler will be called passing in the unique deployment id when  deployment is complete
    */
   public void deployWorkerVerticle(String main, JsonObject config, int instances, Handler<String> doneHandler) {
-    URI[] currURLs = mgr.getDeploymentURLs();
+    List<URI> currURLs = mgr.getDeploymentURLs();
     File modDir = mgr.getDeploymentModDir();
     mgr.deployVerticle(true, main, config, currURLs, instances, modDir, null, doneHandler);
   }
@@ -184,7 +185,7 @@ public class Container {
    * @param doneHandler The handler will be called passing in the unique deployment id when  deployment is complete
    */
   public void deployVerticle(String main, JsonObject config, int instances, Handler<String> doneHandler) {
-    URI[] currURLs = mgr.getDeploymentURLs();
+    List<URI> currURLs = mgr.getDeploymentURLs();
     File modDir = mgr.getDeploymentModDir();
     mgr.deployVerticle(false, main, config, currURLs, instances, modDir, null, doneHandler);
   }

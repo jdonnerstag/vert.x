@@ -34,7 +34,7 @@ public class ModuleDependencies {
 	// true, if analysis completed successfully
 	private boolean success = true;
 
-	final List<String> warnings = new ArrayList<>();
+	final List<String> warnings;
 	
 	/**
 	 * Constructor
@@ -46,6 +46,7 @@ public class ModuleDependencies {
 		this.urls = new ArrayList<URI>();
 		this.includedJars = new HashMap<>();
 		this.includedModules = new ArrayList<>();
+		this.warnings = new ArrayList<>();
 	}
 
 	/**
@@ -54,7 +55,7 @@ public class ModuleDependencies {
 	 * @param runModule
 	 * @param urls
 	 */
-	ModuleDependencies(final String runModule, final URI[] urls) {
+	ModuleDependencies(final String runModule, final List<URI> urls) {
 		this(runModule);
 		
 		if (urls != null) {
@@ -83,9 +84,5 @@ public class ModuleDependencies {
 		this.warnings.add(message);
 		this.success = false;
 		return this;
-	}
-
-	public final URI[] urisToArray() {
-		return urls.toArray(new URI[urls.size()]);
 	}
 }

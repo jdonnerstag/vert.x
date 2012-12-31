@@ -205,7 +205,9 @@ public class TestBase extends TestCase {
       }
     };
 
-    verticleManager.deployVerticle(worker, main, config, new URI[]{url}, instances, null, null, doneHandler);
+    List<URI> urls = new ArrayList<>();
+    urls.add(url);
+    verticleManager.deployVerticle(worker, main, config, urls, instances, null, null, doneHandler);
 
     if (!doneLatch.await(30, TimeUnit.SECONDS)) {
       throw new IllegalStateException("Timedout waiting for apps to start");

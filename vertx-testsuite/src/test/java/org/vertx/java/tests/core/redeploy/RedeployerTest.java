@@ -5,8 +5,10 @@ import org.vertx.java.core.impl.ConcurrentHashSet;
 import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
 import org.vertx.java.deploy.impl.Deployment;
+import org.vertx.java.deploy.impl.ModuleManager;
 import org.vertx.java.deploy.impl.ModuleReloader;
 import org.vertx.java.deploy.impl.Redeployer;
+import org.vertx.java.deploy.impl.VertxModule;
 import org.vertx.java.framework.TestBase;
 import org.vertx.java.framework.TestUtils;
 
@@ -22,11 +24,13 @@ import java.util.concurrent.TimeUnit;
  */
 public class RedeployerTest extends TestBase {
 
-  private static final Logger log = LoggerFactory.getLogger(RedeployerTest.class);
+  @SuppressWarnings("unused")
+	private static final Logger log = LoggerFactory.getLogger(RedeployerTest.class);
 
   TestReloader reloader;
   File modRoot;
   Redeployer red;
+  ModuleManager moduleManager;
 
   protected void setUp() throws Exception {
     super.setUp();
@@ -34,6 +38,7 @@ public class RedeployerTest extends TestBase {
     modRoot = new File("reloader-test-mods");
     modRoot.mkdir();
     red = new Redeployer(vertx, modRoot, reloader);
+    moduleManager = new ModuleManager(vertx, modRoot);
   }
 
   protected void tearDown() throws Exception {
@@ -225,6 +230,6 @@ public class RedeployerTest extends TestBase {
   }
 
   private Deployment createDeployment(String name, String modName, String parentName) {
-     return new Deployment(name, modName, 1, null, null, null, parentName, true);
+     return new Deployment(name, new VertxModule(moduleManager, modName), 1, null, parentName);
   }
 }

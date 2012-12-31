@@ -96,7 +96,11 @@ public class DefaultVertx extends VertxInternal {
 
   public DefaultVertx(int port, String hostname) {
     configure();
-    this.eventBus = new DefaultEventBus(this, port, hostname);
+    if (hostname != null) {
+    	this.eventBus = new DefaultEventBus(this, port, hostname);
+    } else { 
+      this.eventBus = new DefaultEventBus(this);
+    }
   }
 
   /**

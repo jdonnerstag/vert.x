@@ -110,7 +110,7 @@ public class Deployments implements Iterable<String> {
 				buf.append("--");
 			}
 			buf.append("- ").append(name);
-			buf.append(" (module: ").append(depl.modName);
+			buf.append(" (module: ").append(depl.module.modName());
 			buf.append("; verticles: ").append(depl.verticles.size()).append(")");
 			out.println(buf.toString());
 			

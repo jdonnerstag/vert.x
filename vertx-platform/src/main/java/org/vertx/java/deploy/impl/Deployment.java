@@ -16,10 +16,9 @@
 
 package org.vertx.java.deploy.impl;
 
-import org.vertx.java.core.json.JsonObject;
+import org.vertx.java.core.utils.lang.Args;
 
 import java.io.File;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -33,24 +32,14 @@ public class Deployment {
   
   // One module can be associated with a deployment
   // (A module may have dependencies on other modules)
-  // TODO replace with VertxModule
-  public final String modName;
+  public final VertxModule module;
 
   // Number of instances of the same Verticle that are started 
   // on (hopefully) different threads
   public final int instances;
   
-  // Module config
-  // TODO replace with VertxModule
-  public final JsonObject config;
-
-  // Module classpath
-  // TODO replace with VertxModule
-  public final URI[] urls;
-  
-  // Mpdule directory
-  // TODO replace with VertxModule
-  public final File modDir;
+  // working directory  (see preserve-cwd)
+  public final File currentModDir;
 
   // One holder for each instance
   public final List<VerticleHolder> verticles = new ArrayList<>();
@@ -58,24 +47,17 @@ public class Deployment {
   // Deployment tree
   public final List<String> childDeployments = new ArrayList<>();
   public final String parentDeploymentName;
-  
-  // ??
-  public final boolean autoRedeploy;
 
   /**
    * Constructor
    */
-  public Deployment(final String name, final String modName, final int instances, 
-  		final JsonObject config, final URI[] urls, final File modDir, 
-  		final String parentDeploymentName, final boolean autoRedeploy) {
+  public Deployment(final String name, final VertxModule module, final int instances, 
+  		final File currentModDir,  final String parentDeploymentName) {
     this.name = (name != null ? name : createName());
-    this.modName = modName;
+    this.module = Args.notNull(module, "module");
     this.instances = instances;
-    this.config = (config == null ? new JsonObject() : config.copy());
-    this.urls = urls;
-    this.modDir = modDir;
+    this.currentModDir = currentModDir;
     this.parentDeploymentName = parentDeploymentName;
-    this.autoRedeploy = autoRedeploy;
   }
 
   /**

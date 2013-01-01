@@ -171,7 +171,7 @@ public class ModuleManager {
 	/**
 	 * (Async) Install a single module without its dependencies: download from 
 	 * a repository and unzip into modRoot. Existing files will be replaced, extraneous 
-	 * files will not be removed. Uninstall the module, if you want to delete all associated files.
+	 * files will not be removed. Uninstall first, if you want to delete all associated files.
 	 * 
 	 * @param modName
 	 */
@@ -231,9 +231,9 @@ public class ModuleManager {
     	@Override
     	protected boolean onMissingModule(final VertxModule module, final ModuleWalker<Void> walker) 
     			throws Exception {
-	      boolean rtn = installOne(module.modName()).succeeded();
+	      boolean rtn = installOne(module.name()).succeeded();
 	      if (!rtn) {
-	        pdata.failed("Failed to install module: " + module.modName());
+	        pdata.failed("Failed to install module: " + module.name());
 	      } 
 	      return rtn;
     	}
@@ -243,15 +243,15 @@ public class ModuleManager {
 					final ModuleWalker<Void> walker) {
 
 		    if (!module.exists()) {
-	        pdata.failed("Failed to install module: " + module.modName());
+	        pdata.failed("Failed to install module: " + module.name());
 		    	return ModuleVisitResult.TERMINATE;
 		    }
 
-		    if (pdata.includedModules.contains(module.modName())) {
+		    if (pdata.includedModules.contains(module.name())) {
 		    	return ModuleVisitResult.SKIP_SUBTREE;
 		    }
 		    
-		    pdata.includedModules.add(module.modName());
+		    pdata.includedModules.add(module.name());
 
 		    // Add the urls for this module
 		    pdata.urls.add(module.modDir().toURI());
@@ -328,7 +328,7 @@ public class ModuleManager {
 						buf.append("-");
 					}
 					buf.append(" ");
-					buf.append(module.modName());
+					buf.append(module.name());
 					if (!module.exists()) {
 						buf.append(" (missing)");
 					}

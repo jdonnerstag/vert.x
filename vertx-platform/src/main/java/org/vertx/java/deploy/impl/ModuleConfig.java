@@ -178,7 +178,19 @@ public class ModuleConfig {
 	 * @param arg
 	 * @return Guaranteed to be non-null
 	 */
-	public static List<String> getParameterList(String arg) {
+	public static List<String> getParameterList(final String arg) {
+		return getParameterList(arg, ",");
+	}
+	
+	/**
+	 * Get the list of elements from a comma separated list. The elements will be
+	 * trimmed, and empty entries are ignored. That is, non element returned will
+	 * be empty.
+	 * 
+	 * @param arg
+	 * @return Guaranteed to be non-null
+	 */
+	public static List<String> getParameterList(String arg, final String separator) {
 		if (arg == null) {
 			return Collections.emptyList();
 		}
@@ -189,7 +201,7 @@ public class ModuleConfig {
 		}
 
 		List<String> res = null;
-		String[] sarr = arg.split(",");
+		String[] sarr = arg.split(separator);
 		for (String entry : sarr) {
 			entry = entry.trim();
 			if (entry.isEmpty() == false) {

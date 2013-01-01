@@ -125,7 +125,7 @@ public class VertxModule {
 		return modDir;
 	}
 
-	public final String modName() {
+	public final String name() {
 		return modName;
 	}
 

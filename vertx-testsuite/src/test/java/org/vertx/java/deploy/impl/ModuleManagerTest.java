@@ -115,7 +115,7 @@ public class ModuleManagerTest {
     moduleManager.moduleWalker(modName, new ModuleVisitor<Void>() {
 			@Override
 			protected ModuleVisitResult visit(VertxModule module, ModuleWalker<Void> walker) {
-				list.add(module.modName());
+				list.add(module.name());
 				return ModuleVisitResult.CONTINUE;
 			}});
     
@@ -150,7 +150,7 @@ public class ModuleManagerTest {
     VertxModule module1_1_1 = createModule("simumod1-1-1");
     module1_1_1.config().json().putString("includes", "simumod1-1-1-1");
     
-    moduleManager.printModuleTree(module1.modName(), System.out);
+    moduleManager.printModuleTree(module1.name(), System.out);
   }
   
   private VertxModule createModule(String name) {
@@ -164,7 +164,7 @@ public class ModuleManagerTest {
     module.config(new ModuleConfig());
     assertNotSame(VertxModule.NULL_CONFIG, module.config());
     
-    moduleManager.sims.put(module.modName(), module);
+    moduleManager.sims.put(module.name(), module);
     return module;
   }
   

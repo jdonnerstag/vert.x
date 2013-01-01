@@ -10,7 +10,7 @@ import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
 
 /**
- * A utility class to collect module dependency data while walking the tree
+ * A utility class to maintains module dependency data while walking the tree
  * 
  * @author Juergen Donnerstag
  */

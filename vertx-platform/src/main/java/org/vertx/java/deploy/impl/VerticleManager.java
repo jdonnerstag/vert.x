@@ -64,6 +64,7 @@ public class VerticleManager implements ModuleReloader {
 
   private final VertxInternal vertx;
   private final Deployments deployments = new Deployments();
+  // TODO remove
   private final CountDownLatch stopLatch = new CountDownLatch(1);
   private Map<String, String> factoryNames = new HashMap<>();
   private final Redeployer redeployer;
@@ -115,7 +116,20 @@ public class VerticleManager implements ModuleReloader {
   public final ModuleManager moduleManager() {
   	return moduleManager;
   }
+
+  public void stop() {
+    redeployer.close();
+  }
   
+  public final VertxInternal vertx() {
+  	return vertx;
+  }
+
+  public final Deployment deployment(String name) {
+    return deployments.get(name);
+  }
+  
+  // TODO remove
   public void block() {
     while (true) {
       try {
@@ -127,10 +141,12 @@ public class VerticleManager implements ModuleReloader {
     }
   }
 
+  // TODO remove
   public void unblock() {
     stopLatch.countDown();
   }
 
+  // TODO don't like
   public JsonObject getConfig() {
     VerticleHolder holder = getVerticleHolder();
     return holder == null ? null : holder.config;
@@ -156,6 +172,16 @@ public class VerticleManager implements ModuleReloader {
     return holder == null ? null : holder.logger;
   }
 
+  private VerticleHolder getVerticleHolder() {
+    Context context = vertx.getContext();
+    if (context != null) {
+      VerticleHolder holder = (VerticleHolder)context.getDeploymentHandle();
+      return holder;
+    } else {
+      return null;
+    }
+  }
+
   /**
    * (Sync) Deploy ...
    */
@@ -163,37 +189,24 @@ public class VerticleManager implements ModuleReloader {
   		final List<URI> urls, final int instances, final File currentModDir, final String includes,
   		final Handler<String> doneHandler) {
 
+  	final Handler<String> wrapDoneHandler = wrapDoneHandler(doneHandler);
     BlockingAction<Void> deployModuleAction = new BlockingAction<Void>(vertx, null) {
       @Override
       public Void action() throws Exception {
         doDeployVerticle(worker, main, config, urls, instances, currentModDir,
-            includes, wrapDoneHandler(doneHandler));
+            includes, wrapDoneHandler);
         return null;
+      }
+      
+      @Override
+      protected void handle(AsyncResult<Void> result) {
+      	if (result.failed()) {
+      		log.error("Failed to install verticle: " + main, result.exception);
+      	}
       }
     };
 
     return deployModuleAction.run();
-  }
-
-  private Handler<String> wrapDoneHandler(final Handler<String> doneHandler) {
-    if (doneHandler == null) {
-      return null;
-    }
-    final Context context = vertx.getContext();
-    return new Handler<String>() {
-      @Override
-      public void handle(final String deploymentID) {
-        if (context == null) {
-          doneHandler.handle(deploymentID);
-        } else {
-          context.execute(new Runnable() {
-            public void run() {
-              doneHandler.handle(deploymentID);
-            }
-          });
-        }
-      }
-    };
   }
 
   /**
@@ -316,10 +329,6 @@ public class VerticleManager implements ModuleReloader {
     }
   }
 
-  public final Deployment deployment(String name) {
-    return deployments.get(name);
-  }
-
   private void checkWorkerContext() {
     if (VertxThreadFactory.isWorker(Thread.currentThread()) == false) {
       throw new IllegalStateException("Not a worker thread");
@@ -360,7 +369,7 @@ public class VerticleManager implements ModuleReloader {
     module.config(new ModuleConfig(config));
     module.classPath(uris, false);
     module.config().autoRedeploy(autoRedeploy);
-    final Deployment deployment = new Deployment(depName, module, instances, modDir, parentDeploymentName);
+    final Deployment deployment = createDeployment(depName, instances, modDir, parentDeploymentName, module);
     
     if (log.isInfoEnabled()) {
 	    log.info("New Deployment: " + deployment.name + "; main: " + main +
@@ -455,6 +464,14 @@ public class VerticleManager implements ModuleReloader {
     }
   }
 
+  /**
+   * In case somebody requires an extended Deployment implementation
+   */
+	protected Deployment createDeployment(final String depName, final int instances, final File modDir,
+			String parentDeploymentName, VertxModule module) {
+		return new Deployment(depName, module, instances, modDir, parentDeploymentName);
+	}
+
   private VerticleFactory getVerticleFactory(final ClassLoader cl, 
   		final String factoryName, final Handler<String> doneHandler) {
 
@@ -510,16 +527,6 @@ public class VerticleManager implements ModuleReloader {
     		verticle, loggerName, logger, deployment.module.config().json(), factory);
     deployment.verticles.add(holder);
     context.setDeploymentHandle(holder);
-  }
-
-  private VerticleHolder getVerticleHolder() {
-    Context context = vertx.getContext();
-    if (context != null) {
-      VerticleHolder holder = (VerticleHolder)context.getDeploymentHandle();
-      return holder;
-    } else {
-      return null;
-    }
   }
 
   /**
@@ -615,7 +622,7 @@ public class VerticleManager implements ModuleReloader {
     
     doUndeploy(name, new SimpleHandler() {
       public void handle() {
-        if (dep.module.modName() != null && dep.module.config().autoRedeploy()) {
+        if (dep.module.name() != null && dep.module.config().autoRedeploy()) {
           redeployer.moduleUndeployed(dep);
         }
         if (doneHandler != null) {
@@ -637,20 +644,41 @@ public class VerticleManager implements ModuleReloader {
       public Void action() throws Exception {
       	// TODO need to have currentModDir in deployment
         doDeployMod(deployment.module.config().autoRedeploy(), deployment.name, 
-        		deployment.module.modName(), deployment.module.config().json(), 
+        		deployment.module.name(), deployment.module.config().json(), 
         		deployment.instances, null, null);
         return null;
+      }
+      
+      @Override
+      protected void handle(AsyncResult<Void> result) {
+      	if (result.failed()) {
+      		log.error("Failed to redeploy: " + deployment.name + "; module: " + 
+      				deployment.module.name(), result.exception);
+      	}
       }
     };
     return redeployAction.run();
   }
 
-  public void stop() {
-    redeployer.close();
+  private Handler<String> wrapDoneHandler(final Handler<String> doneHandler) {
+    if (doneHandler == null) {
+      return null;
+    }
+    final Context context = vertx.getContext();
+    log.info("wrapHandler context: " + context);
+    return new Handler<String>() {
+      @Override
+      public void handle(final String deploymentID) {
+        if (context == null) {
+          doneHandler.handle(deploymentID);
+        } else {
+          context.execute(new Runnable() {
+            public void run() {
+              doneHandler.handle(deploymentID);
+            }
+          });
+        }
+      }
+    };
   }
-  
-  public final VertxInternal vertx() {
-  	return vertx;
-  }
-
 }

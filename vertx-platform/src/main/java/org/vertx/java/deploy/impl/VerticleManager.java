@@ -141,14 +141,14 @@ public class VerticleManager implements ModuleReloader {
     return holder == null ? null : holder.deployment.name;
   }
 
-  public URI[] getDeploymentURLs() {
+  public List<URI> getDeploymentURLs() {
     VerticleHolder holder = getVerticleHolder();
-    return holder == null ? null : holder.deployment.urls;
+    return holder == null ? null : holder.deployment.module.classPath();
   }
 
   public File getDeploymentModDir() {
     VerticleHolder holder = getVerticleHolder();
-    return holder == null ? null : holder.deployment.modDir;
+    return holder == null ? null : holder.deployment.module.modDir();
   }
 
   public Logger getLogger() {
@@ -160,7 +160,7 @@ public class VerticleManager implements ModuleReloader {
    * (Sync) Deploy ...
    */
   public ActionFuture<Void> deployVerticle(final boolean worker, final String main, final JsonObject config, 
-  		final URI[] urls, final int instances, final File currentModDir, final String includes,
+  		final List<URI> urls, final int instances, final File currentModDir, final String includes,
   		final Handler<String> doneHandler) {
 
     BlockingAction<Void> deployModuleAction = new BlockingAction<Void>(vertx, null) {
@@ -200,13 +200,13 @@ public class VerticleManager implements ModuleReloader {
    * (Async) Deploy ...
    */
   private boolean doDeployVerticle(boolean worker, final String main, final JsonObject config, 
-  		final URI[] urls, final int instances, final File currentModDir, final String includes, 
+  		final List<URI> urls, final int instances, final File currentModDir, final String includes, 
   		final Handler<String> doneHandler) {
 
   	checkWorkerContext();
 
     ModuleDependencies pdata = new ModuleDependencies(main, urls);
-    URI[] theURLs;
+    List<URI> theURLs;
     // The user has specified a list of modules to include when deploying this verticle
     // so we walk the tree of modules adding tree of includes to classpath
     if (includes != null) {
@@ -218,7 +218,7 @@ public class VerticleManager implements ModuleReloader {
           return false;
         }
       }
-      theURLs = pdata.urls.toArray(new URI[pdata.urls.size()]);
+      theURLs = pdata.urls;
     } else {
       theURLs = urls;
     }
@@ -245,7 +245,7 @@ public class VerticleManager implements ModuleReloader {
       @Override
       protected void handle(AsyncResult<Void> result) {
       	if (result.failed()) {
-      		log.error("Failed to install module: " + modName + ": " + result.exception.getMessage());
+      		log.error("Failed to install module: " + modName, result.exception);
       	}
       }
     };
@@ -291,7 +291,7 @@ public class VerticleManager implements ModuleReloader {
     		currentModDir : conf.modDir();
 
     doDeploy(depName, autoRedeploy, worker, main, modName, config, 
-    		deps.urisToArray(), instances, modDirToUse, doneHandler);
+    		deps.urls, instances, modDirToUse, doneHandler);
   }
 
   /**
@@ -349,16 +349,18 @@ public class VerticleManager implements ModuleReloader {
    */
   // TODO wouldn't it be easier to pass a Deployment? Or something like a DeploymentBuilder?
   private final void doDeploy(final String depName, final boolean autoRedeploy, final boolean worker, 
-  		final String main, final String modName, final JsonObject config, final URI[] uris, 
+  		final String main, String modName, final JsonObject config, final List<URI> uris, 
   		final int instances, final File modDir, final Handler<String> doneHandler) {
   	
     checkWorkerContext();
 
     String factoryName = getLanguageFactoryName(main);
-
     String parentDeploymentName = getDeploymentName();
-    final Deployment deployment = new Deployment(depName, modName, instances,
-        config, uris, modDir, parentDeploymentName, autoRedeploy);
+    VertxModule module = new VertxModule(moduleManager, modName);
+    module.config(new ModuleConfig(config));
+    module.classPath(uris, false);
+    module.config().autoRedeploy(autoRedeploy);
+    final Deployment deployment = new Deployment(depName, module, instances, modDir, parentDeploymentName);
     
     if (log.isInfoEnabled()) {
 	    log.info("New Deployment: " + deployment.name + "; main: " + main +
@@ -486,11 +488,11 @@ public class VerticleManager implements ModuleReloader {
 		return factoryName;
 	}
 
-	private URL[] uriArrayToUrlArray(final URI[] uris) {
-    final URL[] urls = new URL[uris.length];
+	private URL[] uriArrayToUrlArray(final List<URI> uris) {
+    final URL[] urls = new URL[uris.size()];
     for (int i=0; i < urls.length; i++) {
     	try {
-				urls[i] = uris[i].toURL();
+				urls[i] = uris.get(i).toURL();
 			} catch (MalformedURLException ex) {
 				log.error("URI to URL conversion error", ex);
 			}
@@ -505,7 +507,7 @@ public class VerticleManager implements ModuleReloader {
     Logger logger = LoggerFactory.getLogger(loggerName);
     Context context = vertx.getContext();
     VerticleHolder holder = new VerticleHolder(deployment, context, 
-    		verticle, loggerName, logger, deployment.config, factory);
+    		verticle, loggerName, logger, deployment.module.config().json(), factory);
     deployment.verticles.add(holder);
     context.setDeploymentHandle(holder);
   }
@@ -613,7 +615,7 @@ public class VerticleManager implements ModuleReloader {
     
     doUndeploy(name, new SimpleHandler() {
       public void handle() {
-        if (dep.modName != null && dep.autoRedeploy) {
+        if (dep.module.modName() != null && dep.module.config().autoRedeploy()) {
           redeployer.moduleUndeployed(dep);
         }
         if (doneHandler != null) {
@@ -634,7 +636,8 @@ public class VerticleManager implements ModuleReloader {
       @Override
       public Void action() throws Exception {
       	// TODO need to have currentModDir in deployment
-        doDeployMod(deployment.autoRedeploy, deployment.name, deployment.modName, deployment.config, 
+        doDeployMod(deployment.module.config().autoRedeploy(), deployment.name, 
+        		deployment.module.modName(), deployment.module.config().json(), 
         		deployment.instances, null, null);
         return null;
       }

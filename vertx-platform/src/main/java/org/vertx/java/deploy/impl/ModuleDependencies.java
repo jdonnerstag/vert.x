@@ -59,6 +59,20 @@ public class ModuleDependencies {
 		this(runModule);
 		
 		if (urls != null) {
+			this.urls.addAll(urls);
+		}
+	}
+
+	/**
+	 * Constructor
+	 * 
+	 * @param runModule
+	 * @param urls
+	 */
+	ModuleDependencies(final String runModule, final URI[] urls) {
+		this(runModule);
+		
+		if (urls != null) {
 			for(URI uri: urls) {
 				this.urls.add(uri);
 			}

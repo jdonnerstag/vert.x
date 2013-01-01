@@ -21,6 +21,7 @@ import java.net.URI;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
 import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
@@ -53,23 +54,37 @@ public class VertxModule {
   private final ModuleManager moduleManager;
 	private final String modName;
 	private final File modDir;
-	private ModuleConfig config = NULL_CONFIG;
+	private final boolean artifical;
+	private ModuleConfig config;
 	private ModuleDependencies dependencies;
 	
 	/**
 	 * Constructor
-	 * 
-	 * @param vertx
 	 */
 	public VertxModule(final ModuleManager moduleManager, final String modName) {
 		this.moduleManager = Args.notNull(moduleManager, "moduleManager");
-		this.modName = Args.notNull(modName, "modName");
-		this.modDir = getModDir(moduleManager.modRoot(), modName);
+		if (modName != null) {
+			this.modName = modName;
+			this.modDir = getModDir(moduleManager.modRoot(), modName);
+			this.config = NULL_CONFIG;
+			this.dependencies = null;
+			this.artifical = false;
+		} else {
+			this.modName = "module-" + UUID.randomUUID().toString();
+			this.modDir = null;
+			this.config = new ModuleConfig();
+			this.dependencies = new ModuleDependencies(this.modName);
+			this.artifical = true;
+		}
 	}
 
 	public final VertxModule config(final ModuleConfig config) {
 		this.config = config;
-		this.dependencies = null;
+		if (artifical) {
+			this.dependencies = new ModuleDependencies(this.modName);
+		} else {
+			this.dependencies = null;
+		}
 		return this;
 	}
 
@@ -127,15 +142,19 @@ public class VertxModule {
 		return this.dependencies;
 	}
 
+	private void check() {
+		if (this.dependencies == null) {
+			install();
+		}
+	}
+	
 	/**
 	 * All modules this module is dependent on
 	 * 
 	 * @return
 	 */
 	public final List<String> requiredModules() {
-		if (this.dependencies == null) {
-			install();
-		}
+		check();
 		return this.dependencies.includedModules;
 	}
 
@@ -145,10 +164,16 @@ public class VertxModule {
 	 * @return
 	 */
 	public final List<URI> classPath() {
-		if (this.dependencies == null) {
-			install();
-		}
+		check();
 		return this.dependencies.urls;
+	}
+	
+	public final void classPath(final List<URI> cp, boolean clear) {
+		check();
+		if (clear) {
+			this.dependencies.urls.clear();
+		}
+		this.dependencies.urls.addAll(cp);
 	}
 	
 	public final List<File> files(final String subdir) {
@@ -159,5 +184,10 @@ public class VertxModule {
 			
 		}
 		return Collections.emptyList();
+	}
+	
+	@Override
+	public String toString() {
+		return modName + "; dir: " + modDir;
 	}
 }

@@ -182,8 +182,8 @@ public class Starter {
 	      verticleManager.deployMod(main, conf, instances, null, doneHandler);
 	    } else {
 	      String includes = args.get("-includes");
-	      List<URI> uriList = Arrays.asList(urls);
-	      verticleManager.deployVerticle(worker, main, conf, uriList, instances, null, includes, doneHandler);
+	      List<URI> uris = Arrays.asList(urls);
+	      verticleManager.deployVerticle(worker, main, conf, uris, instances, null, includes, doneHandler);
 	    }
 	
 	    verticleManager.block();

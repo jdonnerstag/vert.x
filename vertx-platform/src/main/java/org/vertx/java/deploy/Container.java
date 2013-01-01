@@ -19,6 +19,7 @@ package org.vertx.java.deploy;
 import org.vertx.java.core.Handler;
 import org.vertx.java.core.json.JsonObject;
 import org.vertx.java.core.logging.Logger;
+import org.vertx.java.deploy.impl.Deployment;
 import org.vertx.java.deploy.impl.VerticleManager;
 
 import java.io.File;
@@ -203,7 +204,7 @@ public class Container {
    * @param deploymentID The deployment ID
    * @param doneHandler The handler will be called when undeployment is complete
    */
-  public void undeployVerticle(String deploymentID, Handler<Void> doneHandler) {
+  public void undeployVerticle(String deploymentID, Handler<Deployment> doneHandler) {
     mgr.undeploy(deploymentID, doneHandler);
   }
 
@@ -220,7 +221,7 @@ public class Container {
    * @param deploymentID The deployment ID
    * @param doneHandler The handler will be called when undeployment is complete
    */
-  public void undeployModule(String deploymentID, Handler<Void> doneHandler) {
+  public void undeployModule(String deploymentID, Handler<Deployment> doneHandler) {
     mgr.undeploy(deploymentID, doneHandler);
   }
 

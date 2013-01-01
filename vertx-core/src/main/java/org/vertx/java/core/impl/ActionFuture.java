@@ -19,6 +19,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import org.vertx.java.core.AsyncResult;
+import org.vertx.java.core.utils.lang.Args;
 
 /**
  * Action Future
@@ -34,17 +35,25 @@ public class ActionFuture<T> implements Future<AsyncResult<T>> {
   public ActionFuture() {
   }
 
+  public ActionFuture<T> countDown() {
+  	countDown(new AsyncResult<T>());
+  	return this;
+  }
+
   /**
    * The job has finished and the result is provided.
    * 
    * @param res
    */
-  public void countDown(final AsyncResult<T> res) {
+  public ActionFuture<T> countDown(final AsyncResult<T> res) {
+  	Args.notNull(res, "res");
+  	
   	// Don't override the result, if already set
   	if (this.result == null) {
 	  	this.result = res;
 	  	this.latch.countDown();
-  	}
+  	} 
+  	return this;
   }
 
   /**

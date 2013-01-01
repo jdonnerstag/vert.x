@@ -36,7 +36,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.vertx.java.core.AsyncResult;
 import org.vertx.java.core.Handler;
-import org.vertx.java.core.SimpleHandler;
 import org.vertx.java.core.impl.ActionFuture;
 import org.vertx.java.core.impl.BlockingAction;
 import org.vertx.java.core.impl.Context;
@@ -312,16 +311,17 @@ public class VerticleManager implements ModuleReloader {
    * 
    * @param doneHandler
    */
-  public synchronized void undeployAll(final Handler<Void> doneHandler) {
-    final CountingCompletionHandler count = new CountingCompletionHandler(
+  public void undeployAll(final Handler<Void> doneHandler) {
+    final CountingCompletionHandler<Void> count = new CountingCompletionHandler<Void>(
     		vertx.getOrAssignContext(), doneHandler);
     
     for(String name: deployments) {
     	// Already deployed?
     	if (deployments.get(name) != null) { 
 	      count.incRequired();
-	      undeploy(name, new SimpleHandler() {
-	        public void handle() {
+	      undeploy(name, new Handler<Deployment>() {
+	  			@Override
+	  			public void handle(final Deployment dep) {
 	          count.incCompleted();
 	        }
 	      });
@@ -426,8 +426,9 @@ public class VerticleManager implements ModuleReloader {
           }
 
           if (verticle == null) {
-            doUndeploy(deployment.name, new SimpleHandler() {
-              public void handle() {
+            undeploy(deployment.name, new Handler<Deployment>() {
+        			@Override
+        			public void handle(final Deployment dep) {
                 aggHandler.done(false);
               }
             });
@@ -447,8 +448,9 @@ public class VerticleManager implements ModuleReloader {
             aggHandler.done(true);
           } catch (Throwable t) {
             vertx.reportException(t);
-            doUndeploy(deployment.name, new SimpleHandler() {
-              public void handle() {
+            undeploy(deployment.name, new Handler<Deployment>() {
+        			@Override
+        			public void handle(final Deployment dep) {
                 aggHandler.done(false);
               }
             });
@@ -530,22 +532,45 @@ public class VerticleManager implements ModuleReloader {
   }
 
   /**
-   * Undeploy the Deployment
+   * First undeploy all Deployments provided, than redeploy them
    */
-  private void doUndeploy(String name, final Handler<Void> doneHandler) {
-     CountingCompletionHandler count = new CountingCompletionHandler(vertx.getOrAssignContext(), doneHandler);
-     doUndeploy(name, count);
+  public void reloadModules(final Set<Deployment> deps) {
+  	// TODO change to first undeploy all, than reploy all again 
+    for (Deployment deployment: deps) {
+      if (deployments.get(deployment.name) != null) {
+        undeploy(deployment.name, new Handler<Deployment>() {
+    			@Override
+    			public void handle(final Deployment dep) {
+            redeploy(dep);
+          }
+        });
+      } else {
+        // This will be the case if the previous deployment failed, e.g.
+        // a code error in a user verticle
+        redeploy(deployment);
+      }
+    }
   }
 
   /**
    * Undeploy the Deployment
    */
-  private void doUndeploy(final String name, final CountingCompletionHandler count) {
-  	log.info("Undeploy Deployment: " + name);
-  	
-    final Deployment deployment = deployments.remove(name);
+  public final ActionFuture<Deployment> undeploy(final String depName, final Handler<Deployment> doneHandler) {
+    CountingCompletionHandler<Deployment> count = new CountingCompletionHandler<>(vertx.getOrAssignContext(), doneHandler);
+    doUndeploy(depName, count);
+    return count.future();
+  }
+
+  /**
+   * Undeploy the Deployment
+   */
+  private void doUndeploy(final String depName, final CountingCompletionHandler<Deployment> count) {
+  	log.info("Undeploy Deployment: " + depName);
+
+    final Deployment deployment = deployments.remove(depName);
+    count.result(deployment);
     if (deployment == null) {
-    	log.error("Deployment not found. Already undeployed?? Name: " + name);
+    	log.error("Deployment not found. Already undeployed?? Name: " + depName);
     	return;
     }
     
@@ -568,10 +593,11 @@ public class VerticleManager implements ModuleReloader {
           	// Vertx -> Context -> VerticleHolder -> VerticleFactory.reportException(t)
             vertx.reportException(t);
           }
+          // TODO ?? Shouldn't the close hook only be called if nothing is attached to the context? I don't think context and Verticle have a 1:1 relationship
           holder.context.runCloseHooks();
           LoggerFactory.removeLogger(holder.loggerName);
         	if (log.isDebugEnabled()) {
-        		log.debug("Undeployment completed: " + name);
+        		log.debug("Undeployment completed: " + depName);
         	}
           count.incCompleted();
         }
@@ -582,54 +608,13 @@ public class VerticleManager implements ModuleReloader {
     if (deployment.parentDeploymentName != null) {
       Deployment parent = deployments.get(deployment.parentDeploymentName);
       if (parent != null) {
-        parent.childDeployments.remove(name);
+        parent.childDeployments.remove(depName);
       }
     }
-  }
 
-  /**
-   * First undeploy all Deployments provided, than redeploy them
-   */
-  public void reloadModules(final Set<Deployment> deps) {
-  	// TODO change to first undeploy all, than reploy all again 
-    for (final Deployment deployment: deps) {
-      if (deployments.get(deployment.name) != null) {
-        doUndeploy(deployment.name, new SimpleHandler() {
-          public void handle() {
-            redeploy(deployment);
-          }
-        });
-      } else {
-        // This will be the case if the previous deployment failed, e.g.
-        // a code error in a user verticle
-        redeploy(deployment);
-      }
+    if (redeployer != null && deployment.module.config().autoRedeploy()) {
+    	redeployer.moduleUndeployed(deployment);
     }
-  }
-
-  /**
-   * (Async) Undeploy the Deployment
-   */
-  public void undeploy(final String name, final Handler<Void> doneHandler) {
-    final Deployment dep = deployments.get(name);
-    if (dep == null) {
-      log.error("Failed to undeploy. There is no deployment with name: " + name);
-      if (doneHandler != null) {
-        doneHandler.handle(null);
-      }
-      return;
-    }
-    
-    doUndeploy(name, new SimpleHandler() {
-      public void handle() {
-        if (dep.module.name() != null && dep.module.config().autoRedeploy()) {
-          redeployer.moduleUndeployed(dep);
-        }
-        if (doneHandler != null) {
-          doneHandler.handle(null);
-        }
-      }
-    });
   }
 
   /**
@@ -638,6 +623,7 @@ public class VerticleManager implements ModuleReloader {
    * @param deployment
    */
   private ActionFuture<Void> redeploy(final Deployment deployment) {
+  	// TODO replace with doDeployXXX
     // Has to occur on a worker thread
     BlockingAction<Void> redeployAction = new BlockingAction<Void>(vertx) {
       @Override
@@ -650,7 +636,7 @@ public class VerticleManager implements ModuleReloader {
       }
       
       @Override
-      protected void handle(AsyncResult<Void> result) {
+      protected void handle(final AsyncResult<Void> result) {
       	if (result.failed()) {
       		log.error("Failed to redeploy: " + deployment.name + "; module: " + 
       				deployment.module.name(), result.exception);

@@ -47,6 +47,10 @@ public class AsyncResult<T> {
     return exception != null;
   }
 
+  public AsyncResult() {
+  	this((T)null);
+  }
+
   /**
    * Create a successful AsyncResult
    * @param result The result

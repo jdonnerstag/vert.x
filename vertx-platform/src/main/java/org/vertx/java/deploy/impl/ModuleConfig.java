@@ -73,7 +73,7 @@ public class ModuleConfig {
 	 * Constructor
 	 */
 	public ModuleConfig(final JsonObject config) {
-		this.config = Args.notNull(config, "config");
+		this.config = (config == null ? new JsonObject() : config);
 		this.modDir = null;
 	}
 
@@ -134,22 +134,42 @@ public class ModuleConfig {
 		return config.getString(CONFIG_MAIN);
 	}
 
+	public final void main(String main) {
+		config.putString(CONFIG_MAIN, main);
+	}
+	
 	public final boolean worker() {
 		return config.getBoolean(CONFIG_WORKER, false);
 	}
 
+	public final void worker(boolean worker) {
+		config.putBoolean(CONFIG_WORKER, worker);
+	}
+	
 	public final boolean preserveCwd() {
 		return config.getBoolean(CONFIG_PRESERVE_CWD, false);
 	}
 
+	public final void preserveCwd(boolean preserveCwd) {
+		config.putBoolean(CONFIG_PRESERVE_CWD, preserveCwd);
+	}
+	
 	public final boolean autoRedeploy() {
 		return config.getBoolean(CONFIG_AUTO_REDEPLOY, false);
+	}
+
+	public final void autoRedeploy(boolean autoRedeploy) {
+		config.putBoolean(CONFIG_AUTO_REDEPLOY, autoRedeploy);
 	}
 
 	public List<String> includes() {
 		return getParameterList(config.getString(CONFIG_INCLUDES));
 	}
 
+	public final void includes(String includes) {
+		config.putString(CONFIG_INCLUDES, includes);
+	}
+	
 	/**
 	 * Get the list of elements from a comma separated list. The elements will be
 	 * trimmed, and empty entries are ignored. That is, non element returned will

@@ -17,7 +17,9 @@
 package org.vertx.java.deploy.impl;
 
 import java.io.File;
+import java.net.MalformedURLException;
 import java.net.URI;
+import java.net.URL;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -57,7 +59,8 @@ public class VertxModule {
 	private ModuleDependencies dependencies;
 	
 	/**
-	 * Constructor
+	 * Constructor. The module name (modName) might be null, in which case we don't search
+	 * for the config or lib files in the module directory.
 	 */
 	public VertxModule(final ModuleManager moduleManager, final String modName) {
 		this.moduleManager = Args.notNull(moduleManager, "moduleManager");
@@ -125,7 +128,7 @@ public class VertxModule {
 	}
 
 	public boolean exists() {
-		return modDir.canRead() && config() != NULL_CONFIG;
+		return (modName == null) || (modDir.canRead() && config() != NULL_CONFIG);
 	}
 
 	/**
@@ -133,7 +136,13 @@ public class VertxModule {
 	 * @return
 	 */
 	public final ModuleDependencies install() {
-		this.dependencies = moduleManager.install(modName);
+		if (modName != null) {
+			this.dependencies = moduleManager.install(modName);
+		} else {
+			for (String name: config.includes()) {
+				moduleManager.install(name, this.dependencies);
+			}
+		}
 		return this.dependencies;
 	}
 
@@ -161,6 +170,23 @@ public class VertxModule {
 	public final List<URI> classPath() {
 		check();
 		return this.dependencies.urls;
+	}
+
+	public final URL[] classPath2() {
+		check();
+		return uriArrayToUrlArray(this.dependencies.urls);
+	}
+
+	private URL[] uriArrayToUrlArray(final List<URI> uris) {
+    final URL[] urls = new URL[uris.size()];
+    for (int i=0; i < urls.length; i++) {
+    	try {
+				urls[i] = uris.get(i).toURL();
+			} catch (MalformedURLException ex) {
+				log.error("URI to URL conversion error", ex);
+			}
+    }
+		return urls;
 	}
 	
 	public final void classPath(final List<URI> cp, boolean clear) {

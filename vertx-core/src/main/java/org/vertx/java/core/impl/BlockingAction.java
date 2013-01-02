@@ -193,19 +193,31 @@ public abstract class BlockingAction<T> {
 	}
 
 	/**
-	 * A little helper commonly used
-	 * @param <E>
+	 * A little helper to create a handler that executes the doneHandler in 
+	 * the original context
 	 * 
 	 * @param doneHandler
 	 * @return
 	 */
-  protected <E> void callDoneHandler(final Handler<E> doneHandler, final E param) {
-    if (doneHandler != null) {
-	    context.execute(new Runnable() {
-	      public void run() {
-	        doneHandler.handle(param);
-	      }
-	    });
+  public final <E> Handler<E> wrapDoneHandler(final Handler<E> doneHandler) {
+    if (doneHandler == null) {
+      return null;
     }
+    final Context context = vertx.getContext();
+    log.info("wrapHandler context: " + context);
+    return new Handler<E>() {
+      @Override
+      public void handle(final E val) {
+        if (context == null) {
+          doneHandler.handle(val);
+        } else {
+          context.execute(new Runnable() {
+            public void run() {
+              doneHandler.handle(val);
+            }
+          });
+        }
+      }
+    };
   }
 }

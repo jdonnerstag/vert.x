@@ -48,9 +48,9 @@ public class Deployments implements Iterable<String> {
   	return deployments.isEmpty();
   }
   
-  public final void put(final String parent, final String name, final Deployment deployment) {
-  	Args.notNull(name, "name");
+  public final void put(final String parent, final Deployment deployment) {
   	Args.notNull(deployment, "deployment");
+  	String name = deployment.name;
   	deployments.put(name, deployment);
   	if (parent != null) {
   		Deployment p = deployments.get(parent);

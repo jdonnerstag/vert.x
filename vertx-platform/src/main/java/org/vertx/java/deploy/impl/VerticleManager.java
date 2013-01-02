@@ -20,7 +20,6 @@ import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
 import java.nio.file.Path;
@@ -188,12 +187,11 @@ public class VerticleManager implements ModuleReloader {
   		final List<URI> urls, final int instances, final File currentModDir, final String includes,
   		final Handler<String> doneHandler) {
 
-  	final Handler<String> wrapDoneHandler = wrapDoneHandler(doneHandler);
     BlockingAction<Void> deployModuleAction = new BlockingAction<Void>(vertx, null) {
       @Override
       public Void action() throws Exception {
         doDeployVerticle(worker, main, config, urls, instances, currentModDir,
-            includes, wrapDoneHandler);
+            includes, wrapDoneHandler(doneHandler));
         return null;
       }
       
@@ -240,16 +238,13 @@ public class VerticleManager implements ModuleReloader {
 
 	/**
 	 * (Async) Deploy a Module
-	 * 
-	 * TODO could be improved to return the Future
 	 */
-	public final void deployMod(final String modName, final JsonObject config, final int instances,
+	public final ActionFuture<Void> deployMod(final String modName, final JsonObject config, final int instances,
 			final File currentModDir, final Handler<String> doneHandler) {
 
 		BlockingAction<Void> deployModuleAction = new BlockingAction<Void>(vertx()) {
       @Override
       public Void action() throws Exception {
-      	// TODO not sure it is correct to wrap the doneHandler here. 
         doDeployMod(false, null, modName, config, instances, currentModDir, wrapDoneHandler(doneHandler));
         return null;
       }
@@ -262,7 +257,7 @@ public class VerticleManager implements ModuleReloader {
       }
     };
 
-    deployModuleAction.run();	
+    return deployModuleAction.run();	
   }
 
 	/**
@@ -271,112 +266,92 @@ public class VerticleManager implements ModuleReloader {
   public void doDeployMod(final boolean redeploy, final String depName, final String modName,
   		final JsonObject config, final int instances, final File currentModDir,
       final Handler<String> doneHandler) {
-  	
-    checkWorkerContext();
 
-    ModuleDependencies deps = moduleManager.install(modName);
-    if (deps.failed()) {
-    	callDoneHandler(doneHandler, null);
-    	return;
-    }
+    VertxModule module = new VertxModule(moduleManager, modName);
+    module.config(new ModuleConfig(config));
+    module.config().autoRedeploy(redeploy);
 
-    VertxModule module = moduleManager.module(modName);
-    if (!module.exists()) {
-    	log.error("Installed the module '" + modName + "'. But still unable to load config");
-      callDoneHandler(doneHandler, null);
-      return;
-    }
-    
-    ModuleConfig conf = module.config();
-    String main = conf.main();
-    if (main == null) {
-      log.error("Runnable module " + modName + " mod.json must contain a \"main\" field");
-      callDoneHandler(doneHandler, null);
-      return;
-    }
-    
-    boolean worker = conf.worker();
-    boolean autoRedeploy = conf.autoRedeploy();
-    boolean preserveCwd = conf.preserveCwd();
-    
-    File modDirToUse = preserveCwd && currentModDir != null ? 
-    		currentModDir : conf.modDir();
-
-    doDeploy(depName, autoRedeploy, worker, main, modName, config, 
-    		deps.urls, instances, modDirToUse, doneHandler);
+    doDeploy(depName, module, instances, currentModDir, doneHandler);
   }
 
-  /**
-   * Undeploy all Deployments
-   * 
-   * @param doneHandler
-   */
-  public void undeployAll(final Handler<Void> doneHandler) {
-    final CountingCompletionHandler<Void> count = new CountingCompletionHandler<Void>(
-    		vertx.getOrAssignContext(), doneHandler);
-    
-    for(String name: deployments) {
-    	// Already deployed?
-    	if (deployments.get(name) != null) { 
-	      count.incRequired();
-	      undeploy(name, new Handler<Deployment>() {
-	  			@Override
-	  			public void handle(final Deployment dep) {
-	          count.incCompleted();
-	        }
-	      });
-    	}
-    }
-  }
+	/**
+	 * (Sync) Deploy a Module
+	 */
+  public void deploy(final String depName, final String modName, final int instances, 
+  		final File currentModDir, final Handler<String> doneHandler) {
 
-  private void checkWorkerContext() {
-    if (VertxThreadFactory.isWorker(Thread.currentThread()) == false) {
-      throw new IllegalStateException("Not a worker thread");
-    }
-  }
-
-  // We calculate a path adjustment that can be used by the fileSystem object
-  // so that the *effective* working directory can be the module directory
-  // this allows modules to read and write the file system as if they were
-  // in the module dir, even though the actual working directory will be
-  // wherever vertx run or vertx start was called from
-  private void setPathAdjustment(File modDir) {
-    Path cwd = Paths.get(".").toAbsolutePath().getParent();
-    Path pmodDir = Paths.get(modDir.getAbsolutePath());
-    Path relative = cwd.relativize(pmodDir);
-    vertx.getContext().setPathAdjustment(relative);
-  }
-
-  private void callDoneHandler(Handler<String> doneHandler, String deploymentID) {
-    if (doneHandler != null) {
-      doneHandler.handle(deploymentID);
-    }
+  	VertxModule module = moduleManager.module(modName);
+    doDeploy(depName, module, instances, currentModDir, doneHandler);
   }
 
   /**
    * Deploy
    */
-  // TODO wouldn't it be easier to pass a Deployment? Or something like a DeploymentBuilder?
   private final void doDeploy(final String depName, final boolean autoRedeploy, final boolean worker, 
   		final String main, String modName, final JsonObject config, final List<URI> uris, 
-  		final int instances, final File modDir, final Handler<String> doneHandler) {
+  		final int instances, final File currentModDir, final Handler<String> doneHandler) {
+
+    VertxModule module = new VertxModule(moduleManager, modName);
+    module.config(new ModuleConfig(config));
+    module.config().main(main);
+    module.config().worker(worker);
+    module.classPath(uris, false);
+    module.config().autoRedeploy(autoRedeploy);
+    
+    doDeploy(depName, module, instances, currentModDir, doneHandler);
+  }
+
+  /**
+   * Deploy
+   */
+  private void doDeploy(final String depName, final VertxModule module, final int instances, 
+  		File modDir, final Handler<String> doneHandler) {
   	
     checkWorkerContext();
 
-    String factoryName = getLanguageFactoryName(main);
-    String parentDeploymentName = getDeploymentName();
-    VertxModule module = new VertxModule(moduleManager, modName);
-    module.config(new ModuleConfig(config));
-    module.classPath(uris, false);
-    module.config().autoRedeploy(autoRedeploy);
-    final Deployment deployment = createDeployment(depName, instances, modDir, parentDeploymentName, module);
+    ModuleDependencies deps = module.install();
+    if (deps.failed()) {
+    	callDoneHandler(doneHandler, null);
+    	return;
+    }
+
+    if (!module.exists()) {
+    	log.error("Installed the module '" + module.name() + "'. But still unable to load config");
+      callDoneHandler(doneHandler, null);
+      return;
+    }
+    
+    ModuleConfig conf = module.config();
+    final String main = conf.main();
+    if (main == null) {
+      log.error("Runnable module " + module.name() + " mod.json must contain a \"main\" field");
+      callDoneHandler(doneHandler, null);
+      return;
+    }
+
+    final File currentModDir;
+  	if (conf.preserveCwd()) {
+  		currentModDir = modDir;
+  	} else {
+    	currentModDir = conf.modDir();
+    }
+  	
+    String factoryName = getLanguageFactoryName(module.config().main());
+    String parentDepName = getDeploymentName();
+    final Deployment deployment = createDeployment(depName, instances, currentModDir, parentDepName, module);
+    if (deployment == null) {
+    	callDoneHandler(doneHandler, null);
+    	throw new NullPointerException("createDeployment() must not return null");
+    }
+
+    final boolean worker = deployment.module.config().worker();
     
     if (log.isInfoEnabled()) {
 	    log.info("New Deployment: " + deployment.name + "; main: " + main +
 	        "; instances: " + instances);
     }
 
-    deployments.put(parentDeploymentName, deployment.name, deployment);
+    deployments.put(parentDepName, deployment);
 
     class AggHandler {
       AtomicInteger count = new AtomicInteger(0);
@@ -398,26 +373,27 @@ public class VerticleManager implements ModuleReloader {
     // Workers share a single classloader with all instances in a deployment - this
     // enables them to use libraries that rely on caching or statics to share state
     // (e.g. JDBC connection pools)
-    URL[] urls = uriArrayToUrlArray(uris);
+    URL[] urls = deployment.module.classPath2();
     @SuppressWarnings("resource")
-		final ClassLoader sharedLoader = worker ? new ParentLastURLClassLoader(urls, getClass().getClassLoader()) : null;
+		final ClassLoader sharedLoader = worker ?  new ParentLastURLClassLoader(urls, getClass().getClassLoader()) : null;
 
+    // Launch verticle instances
     for (int i = 0; i < instances; i++) {
-      // Launch the verticle instance
-      final ClassLoader cl = sharedLoader != null ? sharedLoader: new ParentLastURLClassLoader(urls, getClass().getClassLoader());
+    	// One classloader per Verticle, except for workers
+      final ClassLoader cl = sharedLoader != null ? sharedLoader : 
+      	new ParentLastURLClassLoader(urls, getClass().getClassLoader());
+      
       Thread.currentThread().setContextClassLoader(cl);
 
       // We load the VerticleFactory class using the verticle classloader - this allows
       // us to put language implementations in modules
-      final VerticleFactory verticleFactory = getVerticleFactory(cl, factoryName, doneHandler);
+      final VerticleFactory verticleFactory = getVerticleFactory(cl, factoryName);
       if (verticleFactory == null) {
-        callDoneHandler(doneHandler, null);
       	return;
       }
 
       Runnable runner = new Runnable() {
         public void run() {
-
           Verticle verticle = null;
           try {
             verticle = verticleFactory.createVerticle(main, cl);
@@ -437,12 +413,15 @@ public class VerticleManager implements ModuleReloader {
 
           // Inject vertx
           verticle.setVertx(vertx);
+          // TODO not sure we need one Container for each Verticle. It looks more like one per 
+          // VerticleManager, but that would not be necessary if VerticleManager were accessible from Vertx
           verticle.setContainer(new Container(VerticleManager.this));
 
           try {
             addVerticle(deployment, verticle, verticleFactory);
-            if (modDir != null) {
-              setPathAdjustment(modDir);
+            // TODO per instance? Context are not even per Verticle. Doesn't it fail with 2 verticles with modDir in the same Context?
+            if (currentModDir != null) {
+              setPathAdjustment(currentModDir);
             }
             verticle.start();
             aggHandler.done(true);
@@ -471,12 +450,11 @@ public class VerticleManager implements ModuleReloader {
    */
 	protected Deployment createDeployment(final String depName, final int instances, final File modDir,
 			String parentDeploymentName, VertxModule module) {
+
 		return new Deployment(depName, module, instances, modDir, parentDeploymentName);
 	}
 
-  private VerticleFactory getVerticleFactory(final ClassLoader cl, 
-  		final String factoryName, final Handler<String> doneHandler) {
-
+  private VerticleFactory getVerticleFactory(final ClassLoader cl, final String factoryName) {
    	Class<?> clazz = null;
     try {
      	clazz = cl.loadClass(factoryName);
@@ -515,18 +493,6 @@ public class VerticleManager implements ModuleReloader {
 		return factoryName;
 	}
 
-	private URL[] uriArrayToUrlArray(final List<URI> uris) {
-    final URL[] urls = new URL[uris.size()];
-    for (int i=0; i < urls.length; i++) {
-    	try {
-				urls[i] = uris.get(i).toURL();
-			} catch (MalformedURLException ex) {
-				log.error("URI to URL conversion error", ex);
-			}
-    }
-		return urls;
-	}
-
   private void addVerticle(final Deployment deployment, final Verticle verticle, 
   		final VerticleFactory factory) {
   	
@@ -560,18 +526,43 @@ public class VerticleManager implements ModuleReloader {
   }
 
   /**
-   * Undeploy the Deployment
+   * Undeploy all Deployments
+   * 
+   * @param doneHandler
    */
-  public final ActionFuture<Deployment> undeploy(final String depName, final Handler<Deployment> doneHandler) {
-    CountingCompletionHandler<Deployment> count = new CountingCompletionHandler<>(vertx.getOrAssignContext(), doneHandler);
-    doUndeploy(depName, count);
+  public ActionFuture<Void> undeployAll(final Handler<Void> doneHandler) {
+    final CountingCompletionHandler<Void> count = new CountingCompletionHandler<Void>(
+    		vertx.getOrAssignContext(), doneHandler);
+    
+    for(String name: deployments) {
+    	// Already deployed?
+    	if (deployments.get(name) != null) { 
+	      count.incRequired();
+	      undeploy(name, new Handler<Deployment>() {
+	  			@Override
+	  			public void handle(final Deployment dep) {
+	          count.incCompleted();
+	        }
+	      });
+    	}
+    }
+    
     return count.future();
   }
 
   /**
    * Undeploy the Deployment
    */
-  private void doUndeploy(final String depName, final CountingCompletionHandler<Deployment> count) {
+  public final ActionFuture<Deployment> undeploy(final String depName, final Handler<Deployment> doneHandler) {
+    CountingCompletionHandler<Deployment> count = new CountingCompletionHandler<>(vertx.getOrAssignContext(), doneHandler);
+    undeploy(depName, count);
+    return count.future();
+  }
+
+  /**
+   * Undeploy the Deployment
+   */
+  private void undeploy(final String depName, final CountingCompletionHandler<Deployment> count) {
   	log.info("Undeploy Deployment: " + depName);
 
     final Deployment deployment = deployments.remove(depName);
@@ -586,7 +577,7 @@ public class VerticleManager implements ModuleReloader {
     	if (log.isDebugEnabled()) {
     		log.debug("Undeploy child: " + childDeployment);
     	}
-      doUndeploy(childDeployment, count);
+      undeploy(childDeployment, count);
     }
 
     // Stop all instances of the Verticle
@@ -653,25 +644,29 @@ public class VerticleManager implements ModuleReloader {
     return redeployAction.run();
   }
 
-  private Handler<String> wrapDoneHandler(final Handler<String> doneHandler) {
-    if (doneHandler == null) {
-      return null;
+  private void checkWorkerContext() {
+    if (VertxThreadFactory.isWorker(Thread.currentThread()) == false) {
+      throw new IllegalStateException("Not a worker thread");
     }
-    final Context context = vertx.getContext();
-    log.info("wrapHandler context: " + context);
-    return new Handler<String>() {
-      @Override
-      public void handle(final String deploymentID) {
-        if (context == null) {
-          doneHandler.handle(deploymentID);
-        } else {
-          context.execute(new Runnable() {
-            public void run() {
-              doneHandler.handle(deploymentID);
-            }
-          });
-        }
-      }
-    };
+  }
+
+  /**
+   * We calculate a path adjustment that can be used by the fileSystem object
+   * so that the *effective* working directory can be the module directory
+   * this allows modules to read and write the file system as if they were
+   * in the module dir, even though the actual working directory will be
+   * wherever vertx run or vertx start was called from
+   */
+  private void setPathAdjustment(final File modDir) {
+    Path cwd = Paths.get(".").toAbsolutePath().getParent();
+    Path pmodDir = Paths.get(modDir.getAbsolutePath());
+    Path relative = cwd.relativize(pmodDir);
+    vertx.getContext().setPathAdjustment(relative);
+  }
+
+  private void callDoneHandler(Handler<String> doneHandler, String deploymentID) {
+    if (doneHandler != null) {
+      doneHandler.handle(deploymentID);
+    }
   }
 }

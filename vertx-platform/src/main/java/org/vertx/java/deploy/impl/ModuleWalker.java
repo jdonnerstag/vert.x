@@ -120,7 +120,7 @@ public class ModuleWalker<T> {
 		}
 		
 		this.stack.push(module);
-		visitModule(modName, module);
+		visitModule(module);
 		this.stack.pop();
 
 		return result;
@@ -141,7 +141,7 @@ public class ModuleWalker<T> {
   				}
   			}
 
-  			res = visitModule(modName, module);
+  			res = visitModule(module);
   			if (res == null) {
   				res = ModuleVisitResult.CONTINUE;
   			}
@@ -162,7 +162,7 @@ public class ModuleWalker<T> {
 	 * Invoke the client visitor on a specific module and continue 
 	 * depending on the return value
 	 */
-	private ModuleVisitResult visitModule(final String modName, final VertxModule module) throws Exception {
+	private ModuleVisitResult visitModule(final VertxModule module) throws Exception {
 		ModuleVisitResult res = ModuleVisitResult.TERMINATE;
 		try {
 			res = visitor.visit(module, this);

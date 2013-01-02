@@ -467,7 +467,7 @@ public class VerticleManager implements ModuleReloader {
   }
 
   /**
-   * In case somebody requires an extended Deployment implementation
+   * Extension point: In case somebody requires an extended Deployment implementation
    */
 	protected Deployment createDeployment(final String depName, final int instances, final File modDir,
 			String parentDeploymentName, VertxModule module) {
@@ -489,19 +489,27 @@ public class VerticleManager implements ModuleReloader {
     }
     return null;
   }
-  
-	private String getLanguageFactoryName(final String main) {
-		int dotIndex = main.lastIndexOf('.');
-    String extension = dotIndex != -1 ? main.substring(dotIndex + 1) : null;
+
+  /**
+   * Extension point: for user who whish to use their own resolution process
+   * 
+   * @param main
+   * @return
+   */
+	protected String getLanguageFactoryName(final String main) {
     String factoryName = null;
-    if (extension != null) {
+		int dotIndex = main.lastIndexOf('.');
+		if (dotIndex != -1) {
+			String extension = main.substring(dotIndex + 1);
       factoryName = factoryNames.get(extension);
     }
     if (factoryName == null) {
       // Use the default
       factoryName = factoryNames.get("default");
       if (factoryName == null) {
-        throw new IllegalArgumentException("No language mapping found and no default specified in langs.properties");
+        throw new IllegalArgumentException(
+        		"No language mapping found and no default specified in langs.properties for: " 
+        				+ main);
       }
     }
 		return factoryName;
@@ -535,13 +543,12 @@ public class VerticleManager implements ModuleReloader {
    * First undeploy all Deployments provided, than redeploy them
    */
   public void reloadModules(final Set<Deployment> deps) {
-  	// TODO change to first undeploy all, than reploy all again 
-    for (Deployment deployment: deps) {
+  	for (final Deployment deployment: deps) {
       if (deployments.get(deployment.name) != null) {
         undeploy(deployment.name, new Handler<Deployment>() {
-    			@Override
-    			public void handle(final Deployment dep) {
-            redeploy(dep);
+					@Override
+					public void handle(Deployment event) {
+            redeploy(deployment);
           }
         });
       } else {
@@ -549,7 +556,7 @@ public class VerticleManager implements ModuleReloader {
         // a code error in a user verticle
         redeploy(deployment);
       }
-    }
+    }  
   }
 
   /**

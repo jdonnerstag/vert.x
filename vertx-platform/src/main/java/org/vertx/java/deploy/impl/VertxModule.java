@@ -21,7 +21,6 @@ import java.net.URI;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
 
 import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
@@ -54,7 +53,6 @@ public class VertxModule {
   private final ModuleManager moduleManager;
 	private final String modName;
 	private final File modDir;
-	private final boolean artifical;
 	private ModuleConfig config;
 	private ModuleDependencies dependencies;
 	
@@ -63,24 +61,21 @@ public class VertxModule {
 	 */
 	public VertxModule(final ModuleManager moduleManager, final String modName) {
 		this.moduleManager = Args.notNull(moduleManager, "moduleManager");
+		this.modName = modName;
 		if (modName != null) {
-			this.modName = modName;
 			this.modDir = getModDir(moduleManager.modRoot(), modName);
 			this.config = NULL_CONFIG;
 			this.dependencies = null;
-			this.artifical = false;
 		} else {
-			this.modName = "module-" + UUID.randomUUID().toString();
 			this.modDir = null;
 			this.config = new ModuleConfig();
 			this.dependencies = new ModuleDependencies(this.modName);
-			this.artifical = true;
 		}
 	}
 
 	public final VertxModule config(final ModuleConfig config) {
 		this.config = config;
-		if (artifical) {
+		if (modName == null) {
 			this.dependencies = new ModuleDependencies(this.modName);
 		} else {
 			this.dependencies = null;
@@ -188,6 +183,6 @@ public class VertxModule {
 	
 	@Override
 	public String toString() {
-		return modName + "; dir: " + modDir;
+		return "name: " + modName + "; dir: " + modDir;
 	}
 }

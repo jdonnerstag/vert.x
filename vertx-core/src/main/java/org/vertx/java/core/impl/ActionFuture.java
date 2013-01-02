@@ -19,6 +19,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import org.vertx.java.core.AsyncResult;
+import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.utils.lang.Args;
 
 /**
@@ -35,8 +36,11 @@ public class ActionFuture<T> implements Future<AsyncResult<T>> {
   public ActionFuture() {
   }
 
-  public ActionFuture<T> countDown() {
-  	countDown(new AsyncResult<T>());
+  public ActionFuture<T> countDown(final Logger log, final String msg) {
+  	if (log != null) {
+  		log.error(msg);
+  	}
+  	countDown(new AsyncResult<T>(new RuntimeException(msg)));
   	return this;
   }
 

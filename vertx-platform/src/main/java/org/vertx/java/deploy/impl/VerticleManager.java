@@ -40,6 +40,7 @@ import org.vertx.java.core.impl.BlockingAction;
 import org.vertx.java.core.impl.Context;
 import org.vertx.java.core.impl.VertxInternal;
 import org.vertx.java.core.impl.VertxThreadFactory;
+import org.vertx.java.core.impl.VertxThreadFactory.VertxThread;
 import org.vertx.java.core.json.JsonObject;
 import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
@@ -207,41 +208,35 @@ public class VerticleManager implements ModuleReloader {
   }
 
   /**
-   * (Async) Deploy ...
+   * Old API. 
    */
+  @Deprecated
   private boolean doDeployVerticle(boolean worker, final String main, final JsonObject config, 
   		final List<URI> urls, final int instances, final File currentModDir, final String includes, 
   		final Handler<String> doneHandler) {
 
   	checkWorkerContext();
 
-    ModuleDependencies pdata = new ModuleDependencies(main, urls);
-    List<URI> theURLs;
-    // The user has specified a list of modules to include when deploying this verticle
-    // so we walk the tree of modules adding tree of includes to classpath
-    if (includes != null) {
-      List<String> includedMods = ModuleConfig.getParameterList(includes);
-      for (String includedMod: includedMods) {
-      	moduleManager.install(includedMod, pdata);
-      	if (pdata.failed()) {
-          callDoneHandler(doneHandler, null);
-          return false;
-        }
-      }
-      theURLs = pdata.urls;
-    } else {
-      theURLs = urls;
-    }
-    doDeploy(null, false, worker, main, null, config, theURLs, instances, currentModDir, doneHandler);
+  	VertxModule module = new VertxModule(moduleManager, null);
+   	module.config(new ModuleConfig(config));
+    module.config().worker(worker);
+    module.config().main(main);
+    module.classPath(urls, false);
+    module.config().includes(includes);
+
+    doDeploy(null, module, instances, currentModDir, doneHandler);
     return true;
   }
 
 	/**
 	 * (Async) Deploy a Module
 	 */
+	// @TODO Not sure what this old API is good for. It kind of doesn't make sense to replace the config
+	@Deprecated
 	public final ActionFuture<Void> deployMod(final String modName, final JsonObject config, final int instances,
 			final File currentModDir, final Handler<String> doneHandler) {
 
+		// TODO This is ugly. Make install() async as well
 		BlockingAction<Void> deployModuleAction = new BlockingAction<Void>(vertx()) {
       @Override
       public Void action() throws Exception {
@@ -261,11 +256,14 @@ public class VerticleManager implements ModuleReloader {
   }
 
 	/**
-	 * (Sync) Deploy a Module
+	 * Deploy a Module identified by name. If config is not null, it'll <b>replace</b> the one
+	 * found on the filesystem
 	 */
-  public void doDeployMod(final boolean redeploy, final String depName, final String modName,
-  		final JsonObject config, final int instances, final File currentModDir,
-      final Handler<String> doneHandler) {
+	// @TODO Not sure what this old API is good for. It kind of doesn't make sense to replace the config
+	@Deprecated
+  public ActionFuture<String> doDeployMod(final boolean redeploy, final String depName, final String modName,
+  		final JsonObject config, final int instances, final File currentModDir, 
+  		final Handler<String> doneHandler) {
 
     VertxModule module = new VertxModule(moduleManager, modName);
     if (config != null) {
@@ -273,62 +271,56 @@ public class VerticleManager implements ModuleReloader {
     }
     module.config().autoRedeploy(redeploy);
 
-    doDeploy(depName, module, instances, currentModDir, doneHandler);
+    return doDeploy(depName, module, instances, currentModDir, doneHandler);
   }
 
 	/**
-	 * (Sync) Deploy a Module
+	 * Deploy a Module identified by name. All module information are assumed to 
+	 * be in the 'mods' directory. If not, the module will searched and downloaded
+	 * from any of the registered repositories.
 	 */
-  public void deploy(final String depName, final String modName, final int instances, 
+  public ActionFuture<String> deploy(final String depName, final String modName, final int instances, 
   		final File currentModDir, final Handler<String> doneHandler) {
 
   	VertxModule module = moduleManager.module(modName);
-    doDeploy(depName, module, instances, currentModDir, doneHandler);
+    return doDeploy(depName, module, instances, currentModDir, doneHandler);
   }
 
   /**
-   * Deploy
+   * Deploy a Module / Verticle.<p>
+   * If the deployment name is <code>null</code>, one will be automatically assigned.<p>
+   * Parameter <code>module</code> must not be <code>null</code>. If the module name is not null, 
+   * than it is assume to be a loadable module from the filesystem. If not found, registered repositories 
+   * will be searched. If module name is null, only the required modules (includes) are checked and 
+   * downloaded if needed.<p>
    */
-  private final void doDeploy(final String depName, final boolean autoRedeploy, final boolean worker, 
-  		final String main, String modName, final JsonObject config, final List<URI> uris, 
-  		final int instances, final File currentModDir, final Handler<String> doneHandler) {
-
-    VertxModule module = new VertxModule(moduleManager, modName);
-    module.config(new ModuleConfig(config));
-    module.config().main(main);
-    module.config().worker(worker);
-    module.classPath(uris, false);
-    module.config().autoRedeploy(autoRedeploy);
-    
-    doDeploy(depName, module, instances, currentModDir, doneHandler);
-  }
-
-  /**
-   * Deploy
-   */
-  private void doDeploy(final String depName, final VertxModule module, final int instances, 
+  public final ActionFuture<String> doDeploy(final String depName, final VertxModule module, final int instances, 
   		File modDir, final Handler<String> doneHandler) {
+
+  	Args.notNull(module, "module");
   	
     checkWorkerContext();
+    
+    final ActionFuture<String> future = new ActionFuture<>();
 
     ModuleDependencies deps = module.install();
     if (deps.failed()) {
     	callDoneHandler(doneHandler, null);
-    	return;
+    	return future.countDown(log, "Module install failed");
     }
 
     if (!module.exists()) {
-    	log.error("Installed the module '" + module.name() + "'. But still unable to load config");
+    	String msg = "Installed the module '" + module.name() + "'. But still unable to load config";
       callDoneHandler(doneHandler, null);
-      return;
+    	return future.countDown(log, msg);
     }
     
     ModuleConfig conf = module.config();
     final String main = conf.main();
     if (main == null) {
-      log.error("Runnable module " + module.name() + " mod.json must contain a \"main\" field");
+      String msg = "Runnable module " + module.name() + " mod.json must contain a \"main\" field";
       callDoneHandler(doneHandler, null);
-      return;
+    	return future.countDown(log, msg);
     }
 
     final File currentModDir;
@@ -343,7 +335,7 @@ public class VerticleManager implements ModuleReloader {
     final Deployment deployment = createDeployment(depName, instances, currentModDir, parentDepName, module);
     if (deployment == null) {
     	callDoneHandler(doneHandler, null);
-    	throw new NullPointerException("createDeployment() must not return null");
+    	return future.countDown(log, "createDeployment() must not return null");
     }
 
     final boolean worker = deployment.module.config().worker();
@@ -364,8 +356,13 @@ public class VerticleManager implements ModuleReloader {
           failed = true;
         }
         if (count.incrementAndGet() == instances) {
-          String deploymentID = failed ? null : deployment.name;
-          callDoneHandler(doneHandler, deploymentID);
+        	if (failed) {
+            callDoneHandler(doneHandler, null);
+          	future.countDown(log, "Failure while deploying Verticle / Module");
+        	} else {
+        		callDoneHandler(doneHandler, deployment.name);
+          	future.countDown(new AsyncResult<String>(deployment.name));
+        	}
         }
       }
     }
@@ -377,13 +374,15 @@ public class VerticleManager implements ModuleReloader {
     // (e.g. JDBC connection pools)
     URL[] urls = deployment.module.classPath2();
     @SuppressWarnings("resource")
-		final ClassLoader sharedLoader = worker ?  new ParentLastURLClassLoader(urls, getClass().getClassLoader()) : null;
+		final ClassLoader sharedLoader = worker ? createParentLastURLClassLoader(urls) : null;
 
     // Launch verticle instances
     for (int i = 0; i < instances; i++) {
     	// One classloader per Verticle, except for workers
-      final ClassLoader cl = sharedLoader != null ? sharedLoader : 
-      	new ParentLastURLClassLoader(urls, getClass().getClassLoader());
+      final ClassLoader cl = sharedLoader != null ? sharedLoader : createParentLastURLClassLoader(urls);
+    	if (cl == null) {
+      	return future.countDown(log, "Verticle class loader must not be null");
+    	}
       
       Thread.currentThread().setContextClassLoader(cl);
 
@@ -391,7 +390,7 @@ public class VerticleManager implements ModuleReloader {
       // us to put language implementations in modules
       final VerticleFactory verticleFactory = getVerticleFactory(cl, factoryName);
       if (verticleFactory == null) {
-      	return;
+      	return future.countDown(log, "getVerticleFactory must not return null");
       }
 
       Runnable runner = new Runnable() {
@@ -445,6 +444,15 @@ public class VerticleManager implements ModuleReloader {
         vertx.startOnEventLoop(runner);
       }
     }
+    
+    return future;
+  }
+  
+  /**
+   * Extension point: In case somebody requires a different verticle class loader
+   */
+  protected ParentLastURLClassLoader createParentLastURLClassLoader(final URL[] urls) {
+  	return new ParentLastURLClassLoader(urls, getClass().getClassLoader());
   }
 
   /**
@@ -647,7 +655,8 @@ public class VerticleManager implements ModuleReloader {
   }
 
   private void checkWorkerContext() {
-    if (VertxThreadFactory.isWorker(Thread.currentThread()) == false) {
+    Thread t = Thread.currentThread();
+    if ((t instanceof VertxThread) && !VertxThreadFactory.isWorker(t)) {
       throw new IllegalStateException("Not a worker thread");
     }
   }

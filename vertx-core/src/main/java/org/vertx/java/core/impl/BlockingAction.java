@@ -204,7 +204,6 @@ public abstract class BlockingAction<T> {
       return null;
     }
     final Context context = vertx.getContext();
-    log.info("wrapHandler context: " + context);
     return new Handler<E>() {
       @Override
       public void handle(final E val) {

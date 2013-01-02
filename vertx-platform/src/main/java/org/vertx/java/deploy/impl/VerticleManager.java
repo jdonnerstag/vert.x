@@ -268,7 +268,9 @@ public class VerticleManager implements ModuleReloader {
       final Handler<String> doneHandler) {
 
     VertxModule module = new VertxModule(moduleManager, modName);
-    module.config(new ModuleConfig(config));
+    if (config != null) {
+    	module.config(new ModuleConfig(config));
+    }
     module.config().autoRedeploy(redeploy);
 
     doDeploy(depName, module, instances, currentModDir, doneHandler);

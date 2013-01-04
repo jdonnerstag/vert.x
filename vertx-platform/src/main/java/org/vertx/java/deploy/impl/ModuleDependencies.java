@@ -20,11 +20,11 @@ public class ModuleDependencies {
 
 	// The root module where the analysis started
 	String runModule;
-	
+
 	// The module's classpath: all required module directories and all jars
 	final List<URI> urls;
-	
-	// List of all Jars contributed by all modules from their respective 
+
+	// List of all Jars contributed by all modules from their respective
 	// 'lib' directory. jar name -> module(s)
 	final Map<String, String> includedJars;
 
@@ -35,7 +35,7 @@ public class ModuleDependencies {
 	private boolean success = true;
 
 	final List<String> warnings;
-	
+
 	/**
 	 * Constructor
 	 * 
@@ -57,7 +57,7 @@ public class ModuleDependencies {
 	 */
 	ModuleDependencies(final String runModule, final List<URI> urls) {
 		this(runModule);
-		
+
 		if (urls != null) {
 			this.urls.addAll(urls);
 		}
@@ -71,18 +71,18 @@ public class ModuleDependencies {
 	 */
 	ModuleDependencies(final String runModule, final URI[] urls) {
 		this(runModule);
-		
+
 		if (urls != null) {
-			for(URI uri: urls) {
+			for (URI uri : urls) {
 				this.urls.add(uri);
 			}
 		}
 	}
-	
+
 	public final boolean failed() {
 		return !success;
 	}
-	
+
 	public final boolean success() {
 		return success;
 	}
@@ -90,11 +90,12 @@ public class ModuleDependencies {
 	/**
 	 * Change the status to 'failed'
 	 * 
-	 * @param message The error message
+	 * @param message
+	 *          The error message
 	 * @return this
 	 */
 	public final ModuleDependencies failed(final String message) {
-  	log.error(message);
+		log.error(message);
 		this.warnings.add(message);
 		this.success = false;
 		return this;

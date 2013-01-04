@@ -25,21 +25,22 @@ import org.vertx.java.core.utils.lang.Args;
  * A little utility to walk a module's dependencies
  * 
  * @author Juergen Donnerstag
- *
- * @param <T> The result type
+ * 
+ * @param <T>
+ *          The result type
  */
 public class ModuleWalker<T> {
-	
+
 	private final ModuleManager moduleManager;
 
 	// Parent are pushed onto the stack which is made available
 	private final Stack<VertxModule> stack = new Stack<>();
-	
+
 	private ModuleVisitor<T> visitor;
 
 	// Temporary store for the result value
 	private T result;
-		
+
 	/**
 	 * Constructor
 	 * 
@@ -65,7 +66,7 @@ public class ModuleWalker<T> {
 	public final T result() {
 		return result;
 	}
-	
+
 	/**
 	 * Set the result value
 	 * 
@@ -85,8 +86,8 @@ public class ModuleWalker<T> {
 	}
 
 	/**
-	 * Same as {@link #visit(String, ModuleVisitor)}, except that all exceptions are 
-	 * converted into RuntimeException.
+	 * Same as {@link #visit(String, ModuleVisitor)}, except that all exceptions
+	 * are converted into RuntimeException.
 	 * 
 	 * @param modName
 	 * @param visitor
@@ -103,8 +104,10 @@ public class ModuleWalker<T> {
 	/**
 	 * Walk the module tree
 	 * 
-	 * @param modName The module to start with
-	 * @param visitor User code invoked upon a visit
+	 * @param modName
+	 *          The module to start with
+	 * @param visitor
+	 *          User code invoked upon a visit
 	 * @return See {@link #result()} and {@link #result(Object)}
 	 * @throws Exception
 	 */
@@ -115,10 +118,10 @@ public class ModuleWalker<T> {
 		VertxModule module = module(modName);
 		if (!module.exists()) {
 			if (visitor.onMissingModule(module, this)) {
-  			module.loadConfig(true);
+				module.loadConfig(true);
 			}
 		}
-		
+
 		this.stack.push(module);
 		visitModule(module);
 		this.stack.pop();
@@ -133,34 +136,34 @@ public class ModuleWalker<T> {
 		this.stack.push(mod);
 		ModuleVisitResult res = ModuleVisitResult.CONTINUE;
 		try {
-  		for(String modName: mod.config().includes()) {
-  			VertxModule module = module(modName);
-  			if (!module.exists()) {
-  				if (visitor.onMissingModule(module, this)) {
-  	  			module.loadConfig(true);
-  				}
-  			}
+			for (String modName : mod.config().includes()) {
+				VertxModule module = module(modName);
+				if (!module.exists()) {
+					if (visitor.onMissingModule(module, this)) {
+						module.loadConfig(true);
+					}
+				}
 
-  			res = visitModule(module);
-  			if (res == null) {
-  				res = ModuleVisitResult.CONTINUE;
-  			}
-  			if (res == ModuleVisitResult.TERMINATE) {
-  				return res;
-  			} else if (res == ModuleVisitResult.SKIP_SIBLINGS) {
-  				return ModuleVisitResult.CONTINUE;
-  			}
-  		}
+				res = visitModule(module);
+				if (res == null) {
+					res = ModuleVisitResult.CONTINUE;
+				}
+				if (res == ModuleVisitResult.TERMINATE) {
+					return res;
+				} else if (res == ModuleVisitResult.SKIP_SIBLINGS) {
+					return ModuleVisitResult.CONTINUE;
+				}
+			}
 		} finally {
 			this.stack.pop();
 		}
-		
+
 		return res;
 	}
 
 	/**
-	 * Invoke the client visitor on a specific module and continue 
-	 * depending on the return value
+	 * Invoke the client visitor on a specific module and continue depending on
+	 * the return value
 	 */
 	private ModuleVisitResult visitModule(final VertxModule module) throws Exception {
 		ModuleVisitResult res = ModuleVisitResult.TERMINATE;
@@ -175,12 +178,12 @@ public class ModuleWalker<T> {
 			return res;
 		} else if (res == ModuleVisitResult.SKIP_SUBTREE) {
 			return res;
-		} 
-		
+		}
+
 		res = visitIncludes(module);
 		if (res != null && res == ModuleVisitResult.TERMINATE) {
 			return res;
-		} 
+		}
 		return ModuleVisitResult.CONTINUE;
 	}
 
@@ -189,36 +192,32 @@ public class ModuleWalker<T> {
 	 * 
 	 * @param <T>
 	 */
-  public abstract static class ModuleVisitor<T> {
-  
-  	/**
-  	 * Invoked for each module found.
-  	 */
-  	protected abstract ModuleVisitResult visit(VertxModule module, ModuleWalker<T> walker);
+	public abstract static class ModuleVisitor<T> {
 
-  	/**
-  	 * Upon an exception. By default re-throws the exception.
-  	 */
-  	protected ModuleVisitResult onException(VertxModule module, ModuleWalker<T> walker, 
-  			Exception ex) throws Exception {
-  		throw ex;
-  	}
+		/**
+		 * Invoked for each module found.
+		 */
+		protected abstract ModuleVisitResult visit(VertxModule module, ModuleWalker<T> walker);
 
-  	/**
-  	 * Upon an exception. By default re-throws the exception.
-  	 */
-  	protected boolean onMissingModule(VertxModule module, ModuleWalker<T> walker) throws Exception {
-  		return false;
-  	}
-  }
+		/**
+		 * Upon an exception. By default re-throws the exception.
+		 */
+		protected ModuleVisitResult onException(VertxModule module, ModuleWalker<T> walker, Exception ex) throws Exception {
+			throw ex;
+		}
 
-  /**
+		/**
+		 * Upon an exception. By default re-throws the exception.
+		 */
+		protected boolean onMissingModule(VertxModule module, ModuleWalker<T> walker) throws Exception {
+			return false;
+		}
+	}
+
+	/**
    * 
    */
-  public enum ModuleVisitResult {
-    CONTINUE,
-    TERMINATE,
-    SKIP_SUBTREE,
-    SKIP_SIBLINGS;
-  }
+	public enum ModuleVisitResult {
+		CONTINUE, TERMINATE, SKIP_SUBTREE, SKIP_SIBLINGS;
+	}
 }

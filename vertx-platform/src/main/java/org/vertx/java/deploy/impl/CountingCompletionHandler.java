@@ -29,45 +29,49 @@ import org.vertx.java.core.impl.Context;
  */
 public class CountingCompletionHandler<T> {
 
-  private final Context context;
-  private final AtomicInteger count = new AtomicInteger(0);
-  private final AtomicInteger required = new AtomicInteger(0);
-  private final Handler<T> doneHandler;
-  private final ActionFuture<T> future;
-  private volatile T result;
+	private final Context context;
+	private final AtomicInteger count = new AtomicInteger(0);
+	private final AtomicInteger required = new AtomicInteger(0);
+	private final Handler<T> doneHandler;
+	private final ActionFuture<T> future;
+	private volatile T result;
 
-  public CountingCompletionHandler(final Context context, final Handler<T> doneHandler) {
-    this.context = context;
-    this.doneHandler = doneHandler;
-    this.future = new ActionFuture<T>();
-  }
+	public CountingCompletionHandler(final Context context, final Handler<T> doneHandler) {
+		this.context = context;
+		this.doneHandler = doneHandler;
+		this.future = new ActionFuture<T>();
+	}
 
-  public final void incCompleted() {
-    count.incrementAndGet();
-    checkDone();
-  }
+	public final void incCompleted() {
+		count.incrementAndGet();
+		checkDone();
+	}
 
-  public final void incRequired() {
-    required.incrementAndGet();
-  }
+	public final void incRequired() {
+		required.incrementAndGet();
+	}
 
-  public final void result(T result) {
-  	this.result = result;
-  }
-  
-  public final ActionFuture<T> future() {
-  	checkDone();
-  	return this.future;
-  }
-  
-  public final void checkDone() {
-    if (doneHandler != null && count.get() == required.get()) {
-      context.execute(new Runnable() {
-        public void run() {
-        	future.countDown(new AsyncResult<T>(result));
-          doneHandler.handle(result);
-        }
-      });
-    }
-  }
+	public final void result(T result) {
+		this.result = result;
+	}
+
+	public final ActionFuture<T> future() {
+		checkDone();
+		return this.future;
+	}
+
+	public final void checkDone() {
+		if (count.get() == required.get()) {
+			if (doneHandler != null) {
+				context.execute(new Runnable() {
+					public void run() {
+						doneHandler.handle(result);
+						future.countDown(new AsyncResult<T>(result));
+					}
+				});
+			} else {
+				future.countDown(new AsyncResult<T>(result));
+			}
+		}
+	}
 }

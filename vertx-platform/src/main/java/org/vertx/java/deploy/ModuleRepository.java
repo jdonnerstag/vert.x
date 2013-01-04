@@ -31,9 +31,11 @@ public interface ModuleRepository {
 	/**
 	 * Install a module from a remote (http) repository.
 	 * 
-	 * @param moduleName Module name
-	 * @param modRoot Where to install the module
+	 * @param moduleName
+	 *          Module name
+	 * @param modRoot
+	 *          Where to install the module
 	 * @param doneHandler
 	 */
-	ActionFuture<Void> installMod(String moduleName, File modRoot, AsyncResultHandler<Void> doneHandler);
+	ActionFuture<Void> installMod(String moduleName, File modRoot, AsyncResultHandler<String> doneHandler);
 }

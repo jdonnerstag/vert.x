@@ -85,8 +85,10 @@ public class Unzipper {
 			byte[] buff = new byte[BUFFER_SIZE];
 			ZipEntry entry;
 			while ((entry = zis.getNextEntry()) != null) {
-				// Entry name might be 'mymod/mod.json' or 'mymod/bin/groovy/myscript.groovy'
-				// TODO Is the jar entry path separator always "/" or can it be "\\" as well?
+				// Entry name might be 'mymod/mod.json' or
+				// 'mymod/bin/groovy/myscript.groovy'
+				// TODO Is the jar entry path separator always "/" or can it be "\\" as
+				// well?
 				// if (!entry.getName().startsWith(modName+"/")) {
 				if (!entry.getName().startsWith(modName)) {
 					log.warn("Ignoring zip file entry because the first path element does not match the module name: " + modName
@@ -112,8 +114,8 @@ public class Unzipper {
 			}
 		} catch (IOException e) {
 			throw new RuntimeException("Failed to unzip module: " + modName, e);
-		} 
-		
+		}
+
 		return true;
 	}
 }

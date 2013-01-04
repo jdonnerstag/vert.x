@@ -18,6 +18,7 @@ package org.vertx.java.tests.deploy;
 import static org.junit.Assert.*;
 
 import java.io.File;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.After;
 import org.junit.AfterClass;
@@ -87,7 +88,7 @@ public class VerticleManagerTest {
 		ModuleManager moduleManager = new ModuleManager(vertx, null, repository);
     verticleManager = new VerticleManager(vertx, moduleManager);
     
-    AsyncResult<Void> res = verticleManager.moduleManager().installOne(TEST_MODULE2);
+    AsyncResult<String> res = verticleManager.moduleManager().installOne(TEST_MODULE2, null).get(30, TimeUnit.SECONDS);
     assertNotNull(res);
     assertTrue(res.succeeded());
     assertTrue(new File("mods/" + TEST_MODULE2 + "/mod.json").exists());
@@ -98,7 +99,7 @@ public class VerticleManagerTest {
     System.getProperties().setProperty(HTTP_PROXY_HOST_PROP_NAME, "localhost");
     System.getProperties().setProperty(HTTP_PROXY_PORT_PROP_NAME, "9093");
     verticleManager = new VerticleManager(vertx);
-    AsyncResult<Void> res = verticleManager.moduleManager().installOne(TEST_MODULE1);
+    AsyncResult<String> res = verticleManager.moduleManager().installOne(TEST_MODULE1, null).get(30, TimeUnit.SECONDS);
     assertTrue(res.succeeded());
     assertTrue(new File("mods/" + TEST_MODULE1 + "/mod.json").exists());
   }

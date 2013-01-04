@@ -33,6 +33,7 @@ import java.net.*;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Command line starter
@@ -42,209 +43,210 @@ import java.util.List;
  */
 public class Starter {
 
-  private static final Logger log = LoggerFactory.getLogger(Starter.class);
+	private static final Logger log = LoggerFactory.getLogger(Starter.class);
 
-  private static final String CP_SEPARATOR = System.getProperty("path.separator");
+	private static final String CP_SEPARATOR = System.getProperty("path.separator");
 
-  // TODO shouldn't that come from gradle? E.g. some file content??
-  private static final String VERSION = "vert.x-1.3.0.final";
+	// TODO shouldn't that come from gradle? E.g. some file content??
+	private static final String VERSION = "vert.x-1.3.0.final";
 
-  public static void main(String[] args) {
-  	try {
-	    if (new Starter().run(args) == false) {
-	      displaySyntax();
-	    }
-  	} catch (Throwable ex) {
-  		log.error(ex);
-  	}
-  }
+	public static void main(String[] args) {
+		try {
+			if (new Starter().run(args) == false) {
+				displaySyntax();
+			}
+		} catch (Throwable ex) {
+			log.error(ex);
+		}
+	}
 
-  /**
-   * Constructor
-   */
-  public Starter() {
-  }
-  
-  /**
-   * Extension Point: subclass to handle additional parameter
-   * 
-   * @param sargs
-   * @return
-   * @throws Exception 
-   */
-  protected boolean run(final String[] sargs) throws Exception {
-    if (sargs.length < 1) {
-      return false;
-    } 
+	/**
+	 * Constructor
+	 */
+	public Starter() {
+	}
 
-    String command = sargs[0].toLowerCase();
-    if ("version".equals(command)) {
-      System.out.println(VERSION);
-      return true;
-    } 
-    
-    if (sargs.length < 2) {
-      return false;
-    } 
-    CommandLineArgs args = new CommandLineArgs(sargs);
-    String operand = sargs[1];
-    switch (command) {
-      case "run":
-        runVerticle(false, operand, args);
-        return true;
-      case "runmod":
-        runVerticle(true, operand, args);
-        return true;
-      case "install":
-        installModule(operand, args);
-        return true;
-      case "uninstall":
-        uninstallModule(operand);
-        return true;
-    }
-    return false;
-  }
+	/**
+	 * Extension Point: subclass to handle additional parameter
+	 * 
+	 * @param sargs
+	 * @return
+	 * @throws Exception
+	 */
+	protected boolean run(final String[] sargs) throws Exception {
+		if (sargs.length < 1) {
+			return false;
+		}
 
-  /**
-   * Install a module from the repository
-   */
-  protected final void installModule(final String modName, final CommandLineArgs args) {
-    String repo = args.get("-repo");
+		String command = sargs[0].toLowerCase();
+		if ("version".equals(command)) {
+			System.out.println(VERSION);
+			return true;
+		}
 
-    try (ExtendedDefaultVertx vertx = new ExtendedDefaultVertx()) {
+		if (sargs.length < 2) {
+			return false;
+		}
+		CommandLineArgs args = new CommandLineArgs(sargs);
+		String operand = sargs[1];
+		switch (command) {
+		case "run":
+			runVerticle(false, operand, args);
+			return true;
+		case "runmod":
+			runVerticle(true, operand, args);
+			return true;
+		case "install":
+			installModule(operand, args);
+			return true;
+		case "uninstall":
+			uninstallModule(operand);
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Install a module from the repository
+	 */
+	protected final void installModule(final String modName, final CommandLineArgs args) {
+		String repo = args.get("-repo");
+
+		try (ExtendedDefaultVertx vertx = new ExtendedDefaultVertx()) {
 			vertx.moduleRepository(repo);
-	    vertx.moduleManager(null).install(modName);
-    }
-  }
+			if (vertx.moduleManager(null).install(modName, null).get(30, TimeUnit.SECONDS) == null) {
+				log.error("Timed out while waiting for module to install");
+			}
+		}
+	}
 
-  private void uninstallModule(String modName) {
-    try (ExtendedDefaultVertx vertx = new ExtendedDefaultVertx()) {
-	    vertx.moduleManager(null).uninstall(modName);
-    }
-  }
+	private void uninstallModule(String modName) {
+		try (ExtendedDefaultVertx vertx = new ExtendedDefaultVertx()) {
+			vertx.moduleManager(null).uninstall(modName);
+		}
+	}
 
-  protected final void runVerticle(final boolean module, final String main, 
-  		final CommandLineArgs args) throws Exception {
+	protected final void runVerticle(final boolean module, final String main, final CommandLineArgs args)
+			throws Exception {
 
-  	// TODO get cluster and repo defaults from VertxConfig
-    int clusterPort = 0;
-    String clusterHost = null;
-    boolean clustered = args.present("-cluster");
-    if (clustered) {
-      log.info("Starting clustering...");
-      clusterPort = args.getInt("-cluster-port", 25500, 25500);
-      clusterHost = args.get("-cluster-host");
-      if (clusterHost == null) {
-        clusterHost = getDefaultAddress();
-        if (clusterHost == null) {
-          log.error("Unable to find a default network interface for clustering. Please specify one using -cluster-host");
-          return;
-        } else {
-          log.info("No cluster-host specified so using address " + clusterHost);
-        }
-      }
-    }
-	  
-	  try (ExtendedDefaultVertx vertx = new ExtendedDefaultVertx(clusterPort, clusterHost)) {
-	    
-	    String repo = args.get("-repo");
+		// TODO get cluster and repo defaults from VertxConfig
+		int clusterPort = 0;
+		String clusterHost = null;
+		boolean clustered = args.present("-cluster");
+		if (clustered) {
+			log.info("Starting clustering...");
+			clusterPort = args.getInt("-cluster-port", 25500, 25500);
+			clusterHost = args.get("-cluster-host");
+			if (clusterHost == null) {
+				clusterHost = getDefaultAddress();
+				if (clusterHost == null) {
+					log.error("Unable to find a default network interface for clustering. Please specify one using -cluster-host");
+					return;
+				} else {
+					log.info("No cluster-host specified so using address " + clusterHost);
+				}
+			}
+		}
+
+		try (ExtendedDefaultVertx vertx = new ExtendedDefaultVertx(clusterPort, clusterHost)) {
+
+			String repo = args.get("-repo");
 			vertx.moduleRepository(repo);
-	
-	    boolean worker = args.present("-worker");
-	    
-	    String cp = args.get("-cp", ".");
-	    URI[] urls = classpath(cp);
-	
-	    int instances = args.getInt("-instances", 1, -1);
-	    if (instances < 1) {
-        log.error("Invalid number of instances");
-        displaySyntax();
-        return;
-	    }
-	
-	    String configFile = args.get("-conf");
-	    JsonObject conf = null;
-	    if (configFile != null) {
-	    	conf = new ModuleConfig(new File(configFile)).json();
-	    }
-	
-	    final VerticleManager verticleManager = vertx.verticleManager();
-	    Handler<String> doneHandler = new Handler<String>() {
-	      public void handle(String id) {
-	        if (id == null) {
-	          // Failed to deploy
-	          verticleManager.unblock();
-	        }
-	      }
-	    };
-	    
-	    if (module) {
-	      verticleManager.deployMod(main, conf, instances, null, doneHandler);
-	    } else {
-	      String includes = args.get("-includes");
-	      List<URI> uris = Arrays.asList(urls);
-	      verticleManager.deployVerticle(worker, main, conf, uris, instances, null, includes, doneHandler);
-	    }
-	
-	    verticleManager.block();
-  	}
-  }
 
-  private URI[] classpath(String cp) {
-    String[] parts;
-    if (cp.contains(CP_SEPARATOR)) {
-      parts = cp.split(CP_SEPARATOR);
-    } else {
-      parts = new String[] { cp };
-    }
-    int index = 0;
-    final URI[] urls = new URI[parts.length];
-    for (String part: parts) {
-      URI url = new File(part).toURI();
-      urls[index++] = url;
-    }
-    return urls;
-  }
-  
-  /**
-   * Get default interface to use since the user hasn't specified one
-   */
-  private String getDefaultAddress() {
-    Enumeration<NetworkInterface> nets;
-    try {
-      nets = NetworkInterface.getNetworkInterfaces();
-    } catch (SocketException e) {
-      return null;
-    }
-    
-    while (nets.hasMoreElements()) {
-    	NetworkInterface netinf = nets.nextElement();
-      Enumeration<InetAddress> addresses = netinf.getInetAddresses();
+			boolean worker = args.present("-worker");
 
-      while (addresses.hasMoreElements()) {
-        InetAddress address = addresses.nextElement();
-        if (!address.isAnyLocalAddress() && !address.isMulticastAddress()
-            && !(address instanceof Inet6Address)) {
-          return address.getHostAddress();
-        }
-      }
-    }
-    return null;
-  }
+			String cp = args.get("-cp", ".");
+			URI[] urls = classpath(cp);
 
-  /**
-   * Prints the help text
-   */
-  private static void displaySyntax() {
-  	try (InputStream in = Starter.class.getResourceAsStream("help.txt");
-  			InputStreamReader rin = new InputStreamReader(in);
-  			BufferedReader bin = new BufferedReader(rin)) {
-  		String line;
-  		while (null != (line = bin.readLine())) {
-  			System.out.println(line);
-  		}
-  	} catch (IOException ex) {
-  		log.error("Help text not found !?!");
-  	}
-  }
+			int instances = args.getInt("-instances", 1, -1);
+			if (instances < 1) {
+				log.error("Invalid number of instances");
+				displaySyntax();
+				return;
+			}
+
+			String configFile = args.get("-conf");
+			JsonObject conf = null;
+			if (configFile != null) {
+				conf = new ModuleConfig(new File(configFile)).json();
+			}
+
+			final VerticleManager verticleManager = vertx.verticleManager();
+			Handler<String> doneHandler = new Handler<String>() {
+				public void handle(String id) {
+					if (id == null) {
+						// Failed to deploy
+						verticleManager.unblock();
+					}
+				}
+			};
+
+			if (module) {
+				verticleManager.deployMod(main, conf, instances, null, doneHandler);
+			} else {
+				String includes = args.get("-includes");
+				List<URI> uris = Arrays.asList(urls);
+				verticleManager.deployVerticle(worker, main, conf, uris, instances, null, includes, doneHandler);
+			}
+
+			verticleManager.block();
+		}
+	}
+
+	private URI[] classpath(String cp) {
+		String[] parts;
+		if (cp.contains(CP_SEPARATOR)) {
+			parts = cp.split(CP_SEPARATOR);
+		} else {
+			parts = new String[] { cp };
+		}
+		int index = 0;
+		final URI[] urls = new URI[parts.length];
+		for (String part : parts) {
+			URI url = new File(part).toURI();
+			urls[index++] = url;
+		}
+		return urls;
+	}
+
+	/**
+	 * Get default interface to use since the user hasn't specified one
+	 */
+	private String getDefaultAddress() {
+		Enumeration<NetworkInterface> nets;
+		try {
+			nets = NetworkInterface.getNetworkInterfaces();
+		} catch (SocketException e) {
+			return null;
+		}
+
+		while (nets.hasMoreElements()) {
+			NetworkInterface netinf = nets.nextElement();
+			Enumeration<InetAddress> addresses = netinf.getInetAddresses();
+
+			while (addresses.hasMoreElements()) {
+				InetAddress address = addresses.nextElement();
+				if (!address.isAnyLocalAddress() && !address.isMulticastAddress() && !(address instanceof Inet6Address)) {
+					return address.getHostAddress();
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Prints the help text
+	 */
+	private static void displaySyntax() {
+		try (InputStream in = Starter.class.getResourceAsStream("help.txt");
+				InputStreamReader rin = new InputStreamReader(in);
+				BufferedReader bin = new BufferedReader(rin)) {
+			String line;
+			while (null != (line = bin.readLine())) {
+				System.out.println(line);
+			}
+		} catch (IOException ex) {
+			log.error("Help text not found !?!");
+		}
+	}
 }

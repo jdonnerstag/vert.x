@@ -86,21 +86,21 @@ public class ModuleManagerTest {
   @Test
   public void testSimple() throws Exception {
     String modName = "testmod1-1";
-    moduleManager.installOne(modName, 30, TimeUnit.SECONDS);
+    assertNotNull(moduleManager.installOne(modName, null).get(30, TimeUnit.SECONDS));
     assertTrue(modDir.newFile(modName).isDirectory());
   }
 
   @Test
   public void testInstallOne() throws Exception {
     String modName = "testmod8-1";
-    moduleManager.installOne(modName, 30, TimeUnit.SECONDS);
+    assertNotNull(moduleManager.installOne(modName, null).get(30, TimeUnit.SECONDS));
     assertTrue(modDir.newFile(modName).isDirectory());
   }
 
   @Test
   public void testInstallAll() throws Exception {
     String modName = "testmod8-1";
-    moduleManager.install(modName);
+    assertNotNull(moduleManager.install(modName, null).get(30, TimeUnit.SECONDS));
     assertTrue(modDir.newFile(modName).isDirectory());
     assertTrue(modDir.newFile("testmod8-2").isDirectory());
     assertTrue(modDir.newFile("testmod8-3").isDirectory());
@@ -109,7 +109,7 @@ public class ModuleManagerTest {
   @Test
   public void testWalker() throws Exception {
     String modName = "testmod8-1";
-    moduleManager.install(modName);
+    assertNotNull(moduleManager.install(modName, null).get(30, TimeUnit.SECONDS));
     
     final List<String> list = new ArrayList<>();
     moduleManager.moduleWalker(modName, new ModuleVisitor<Void>() {

@@ -26,61 +26,61 @@ import org.vertx.java.core.utils.lang.Args;
 
 /**
  * Maintain the Deployment hierarchy
- *
+ * 
  * @author Juergen Donnerstag
  */
 public class Deployments implements Iterable<String> {
 
-  private static final Logger log = LoggerFactory.getLogger(Deployments.class);
+	private static final Logger log = LoggerFactory.getLogger(Deployments.class);
 
-  // deployment name --> deployment
-  private final Map<String, Deployment> deployments = new ConcurrentHashMap<>();
+	// deployment name --> deployment
+	private final Map<String, Deployment> deployments = new ConcurrentHashMap<>();
 
-  public Deployments() {
-  }
-  
-  public final Deployment get(final String name) {
-  	Args.notNull(name, "name");
-  	return deployments.get(name);
-  }
-  
-  public final boolean isEmpty() {
-  	return deployments.isEmpty();
-  }
-  
-  public final void put(final String parent, final Deployment deployment) {
-  	Args.notNull(deployment, "deployment");
-  	String name = deployment.name;
-  	deployments.put(name, deployment);
-  	if (parent != null) {
-  		Deployment p = deployments.get(parent);
-  		if (p != null) {
-  			if (p.childDeployments.contains(name)) {
-  				log.warn("The parent Deployment already contains a child with the very same name." + 
-  						"child: " + name + "; parent: " + parent);
-  			}
-  			p.childDeployments.add(name);
-  		} else {
-  			log.error("Parent Deployment not found. name: " + name);
-  		}
-  	}
-  }
+	public Deployments() {
+	}
 
-  public final Deployment remove(final String name) {
-  	Deployment depl = null;
-  	if (name != null) {
-  		depl = deployments.remove(name);
-  		if (depl == null) {
-  			log.error("Deployment not found: " +  name);
-  		} else if (depl.parentDeploymentName != null) {
-  			Deployment parent = deployments.get(depl.parentDeploymentName);
-  			if (parent == null) {
-    			log.error("Parent Deployment not found. name: " + depl.parentDeploymentName);
-  			}
-  		}
-  	}
-  	return depl;
-  }
+	public final Deployment get(final String name) {
+		Args.notNull(name, "name");
+		return deployments.get(name);
+	}
+
+	public final boolean isEmpty() {
+		return deployments.isEmpty();
+	}
+
+	public final void put(final String parent, final Deployment deployment) {
+		Args.notNull(deployment, "deployment");
+		String name = deployment.name;
+		deployments.put(name, deployment);
+		if (parent != null) {
+			Deployment p = deployments.get(parent);
+			if (p != null) {
+				if (p.childDeployments.contains(name)) {
+					log.warn("The parent Deployment already contains a child with the very same name." + "child: " + name
+							+ "; parent: " + parent);
+				}
+				p.childDeployments.add(name);
+			} else {
+				log.error("Parent Deployment not found. name: " + name);
+			}
+		}
+	}
+
+	public final Deployment remove(final String name) {
+		Deployment depl = null;
+		if (name != null) {
+			depl = deployments.remove(name);
+			if (depl == null) {
+				log.error("Deployment not found: " + name);
+			} else if (depl.parentDeploymentName != null) {
+				Deployment parent = deployments.get(depl.parentDeploymentName);
+				if (parent == null) {
+					log.error("Parent Deployment not found. name: " + depl.parentDeploymentName);
+				}
+			}
+		}
+		return depl;
+	}
 
 	@Override
 	public Iterator<String> iterator() {
@@ -90,7 +90,7 @@ public class Deployments implements Iterable<String> {
 	public final void print(final PrintStream out) {
 		Args.notNull(out, "out");
 		int depth = 0;
-		for (String name: this) {
+		for (String name : this) {
 			Deployment depl = get(name);
 			if (depl.parentDeploymentName == null) {
 				print(depl, depth, out);
@@ -102,32 +102,32 @@ public class Deployments implements Iterable<String> {
 	 * Little utility to print out the hierarchy
 	 */
 	private void print(final Deployment root, final int depth, final PrintStream out) {
-		for (String name: root.childDeployments) {
+		for (String name : root.childDeployments) {
 			Deployment depl = get(name);
 
 			StringBuilder buf = new StringBuilder();
-			for (int i=0; i < depth; i++) {
+			for (int i = 0; i < depth; i++) {
 				buf.append("--");
 			}
 			buf.append("- ").append(name);
 			buf.append(" (module: ").append(depl.module.name());
 			buf.append("; verticles: ").append(depl.verticles.size()).append(")");
 			out.println(buf.toString());
-			
-			for (String child: depl.childDeployments) {
+
+			for (String child : depl.childDeployments) {
 				print(get(child), depth + 1, out);
 			}
 		}
 	}
-	
+
 	@Override
 	public String toString() {
 		int size = deployments.size();
 		int rootDeployments = 0;
 		int deepestHierarchy = 0;
 		int verticles = 0;
-		
-		for (String name: this) {
+
+		for (String name : this) {
 			Deployment depl = get(name);
 			if (depl.parentDeploymentName == null) {
 				rootDeployments += 1;
@@ -146,8 +146,8 @@ public class Deployments implements Iterable<String> {
 			}
 			verticles += depl.verticles.size();
 		}
-		
-		return "Size: " + size + "; Roots: " + rootDeployments + "; deepest: " + 
-			deepestHierarchy + "; # verticles: " + verticles;
+
+		return "Size: " + size + "; Roots: " + rootDeployments + "; deepest: " + deepestHierarchy + "; # verticles: "
+				+ verticles;
 	}
 }

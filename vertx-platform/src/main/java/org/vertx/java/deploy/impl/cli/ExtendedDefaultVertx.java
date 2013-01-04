@@ -36,62 +36,62 @@ import org.vertx.java.deploy.impl.VerticleManager;
  */
 public class ExtendedDefaultVertx extends DefaultVertx implements Closeable {
 
-  private static final Logger log = LoggerFactory.getLogger(ExtendedDefaultVertx.class);
+	private static final Logger log = LoggerFactory.getLogger(ExtendedDefaultVertx.class);
 
 	private ModuleRepository repository;
 	private ModuleManager moduleManager;
-  private VerticleManager verticleManager;
+	private VerticleManager verticleManager;
 
-  public ExtendedDefaultVertx() {
-  	super();
-  }
+	public ExtendedDefaultVertx() {
+		super();
+	}
 
-  public ExtendedDefaultVertx(String hostname) {
-  	super(hostname);
-  }
+	public ExtendedDefaultVertx(String hostname) {
+		super(hostname);
+	}
 
-  public ExtendedDefaultVertx(int port, String hostname) {
-  	super(port, hostname);
-  }
+	public ExtendedDefaultVertx(int port, String hostname) {
+		super(port, hostname);
+	}
 
-  public ModuleRepository moduleRepository(String repo) {
-  	if (repository == null) {
-  		repository = new DefaultModuleRepository(this, repo);
-  	}
-  	return repository;
-  }
+	public ModuleRepository moduleRepository(String repo) {
+		if (repository == null) {
+			repository = new DefaultModuleRepository(this, repo);
+		}
+		return repository;
+	}
 
-  public ModuleManager moduleManager(File modRoot) {
-  	if (moduleManager == null) {
-  		moduleManager = new ModuleManager(this, modRoot, moduleRepository(null));
-  	}
-  	return moduleManager;
-  }
+	public ModuleManager moduleManager(File modRoot) {
+		if (moduleManager == null) {
+			moduleManager = new ModuleManager(this, modRoot, moduleRepository(null));
+		}
+		return moduleManager;
+	}
 
-  public VerticleManager verticleManager() {
-  	if (verticleManager == null) {
-  		verticleManager = new VerticleManager(this, moduleManager(null));
-  	}
-  	return verticleManager;
-  }
+	public VerticleManager verticleManager() {
+		if (verticleManager == null) {
+			verticleManager = new VerticleManager(this, moduleManager(null));
+		}
+		return verticleManager;
+	}
 
-  @Override
-  public void stop() {
-    
-  	if (verticleManager != null) {
-	  	final VertxCountDownLatch latch = new VertxCountDownLatch(1);
-	    verticleManager.undeployAll(new SimpleHandler() {
-	      public void handle() {
-	        latch.countDown();
-	      }
-	    });
-	    if (!latch.await(30, TimeUnit.SECONDS)) {
-	      log.error("Timed out waiting to undeploy all");
-	    }
-  	}
-  	
-  	super.stop();
-  }
+	@Override
+	public void stop() {
+
+		if (verticleManager != null) {
+			final VertxCountDownLatch latch = new VertxCountDownLatch(1);
+			verticleManager.undeployAll(new SimpleHandler() {
+				public void handle() {
+					latch.countDown();
+				}
+			});
+			if (!latch.await(30, TimeUnit.SECONDS)) {
+				log.error("Timed out waiting to undeploy all");
+			}
+		}
+
+		super.stop();
+	}
 
 	@Override
 	public void close() {

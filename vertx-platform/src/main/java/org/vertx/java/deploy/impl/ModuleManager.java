@@ -19,10 +19,14 @@ package org.vertx.java.deploy.impl;
 import java.io.File;
 import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
+import java.util.Set;
 
 import org.vertx.java.core.AsyncResult;
+import org.vertx.java.core.AsyncResultHandler;
+import org.vertx.java.core.Handler;
 import org.vertx.java.core.impl.ActionFuture;
 import org.vertx.java.core.impl.VertxInternal;
 import org.vertx.java.core.logging.Logger;
@@ -33,11 +37,12 @@ import org.vertx.java.deploy.impl.ModuleWalker.ModuleVisitResult;
 import org.vertx.java.deploy.impl.ModuleWalker.ModuleVisitor;
 
 /**
- * The Module manager attempts to downloads missing Modules from registered 
- * Repositories. Each Module gets installed in its own subdirectory
- * and must contain a file called 'mod.json', which is the module's config file.
- * Besides a few other attributes, it also defines dependencies on other modules
- * ('includes'). The Module manager make sure that all dependencies are resolved.
+ * The Module manager attempts to downloads missing Modules from registered
+ * Repositories. Each Module gets installed in its own subdirectory and must
+ * contain a file called 'mod.json', which is the module's config file. Besides
+ * a few other attributes, it also defines dependencies on other modules
+ * ('includes'). The Module manager make sure that all dependencies are
+ * resolved.
  * 
  * @author <a href="http://tfox.org">Tim Fox</a>
  * @author Juergen Donnerstag
@@ -50,8 +55,8 @@ public class ModuleManager {
 	private static final String DEFAULT_MODULE_ROOT_DIR = "mods";
 	private static final String LIB_DIR = "lib";
 
-	private final VertxInternal vertx; 
-	
+	private final VertxInternal vertx;
+
 	private List<ModuleRepository> moduleRepositories = new ArrayList<>();
 
 	// The directory where modules will be downloaded to
@@ -63,9 +68,9 @@ public class ModuleManager {
 	 * @param vertx
 	 */
 	public ModuleManager(final VertxInternal vertx) {
-		this(vertx, (File)null);
+		this(vertx, (File) null);
 	}
-	
+
 	/**
 	 * Constructor
 	 * 
@@ -81,7 +86,7 @@ public class ModuleManager {
 
 		initRepositories(repos);
 	}
-	
+
 	/**
 	 * Initialize modRoot
 	 * 
@@ -97,48 +102,50 @@ public class ModuleManager {
 			}
 			modRoot = new File(modDir);
 		}
-		
+
 		if (modRoot.exists() == false) {
 			log.info("Module root directory does not exist => create it: " + modRoot.getAbsolutePath());
 			if (modRoot.mkdir() == false) {
 				throw new IllegalArgumentException("Unable to create directory: " + modRoot.getAbsolutePath());
 			}
 		} else if (modRoot.isDirectory() == false) {
-			throw new IllegalArgumentException("Module root directory exists, but is not a directory: " + 
-					modRoot.getAbsolutePath());
+			throw new IllegalArgumentException("Module root directory exists, but is not a directory: "
+					+ modRoot.getAbsolutePath());
 		}
-		
+
 		return modRoot;
 	}
 
 	/**
-	 * Initialize the list of repositories. 
+	 * Initialize the list of repositories.
 	 * 
 	 * @param repository
 	 * @param moduleRepositories
 	 */
 	private void initRepositories(final ModuleRepository... repos) {
-		for (ModuleRepository repo: repos) {
+		for (ModuleRepository repo : repos) {
 			moduleRepositories().add(repo);
 		}
-		
+
 		if (moduleRepositories().size() == 0) {
 			moduleRepositories().add(new DefaultModuleRepository(vertx, null));
 		}
 	}
-	
+
 	/**
-	 * This methods provides full unsynchronized access to the list of repositories. You can remove the default
-	 * entry, add new repositories, etc.. It's a little bit dangerous because it's unsynchronized. At the same 
-	 * time we don't expect the list to be modified very often. Adding repos right after ModuleManager was 
-	 * created, in the same thread, is absolutely safe and likely the standard use case.
+	 * This methods provides full unsynchronized access to the list of
+	 * repositories. You can remove the default entry, add new repositories, etc..
+	 * It's a little bit dangerous because it's unsynchronized. At the same time
+	 * we don't expect the list to be modified very often. Adding repos right
+	 * after ModuleManager was created, in the same thread, is absolutely safe and
+	 * likely the standard use case.
 	 * 
 	 * @return
 	 */
 	public final List<ModuleRepository> moduleRepositories() {
 		return this.moduleRepositories;
 	}
-	
+
 	/**
 	 * @return The modules root directory
 	 */
@@ -158,173 +165,214 @@ public class ModuleManager {
 	}
 
 	/**
-	 * (Sync) Install a single module without its dependencies: download from 
-	 * a repository and unzip into modRoot. Existing files will be replaced, extraneous 
-	 * files will not be removed. Uninstall the module, if you want to delete all associated files.
+	 * (Async) Install a single module without its dependencies: download from a
+	 * repository and unzip into modRoot. Existing files will be replaced,
+	 * extraneous files will not be removed. Uninstall first, if you want to
+	 * delete all associated files.
 	 * 
 	 * @param modName
 	 */
-	public AsyncResult<Void> installOne(final String modName) {
-		return installOne(modName, 30, TimeUnit.SECONDS);
+	public ActionFuture<String> installOne(final String modName, final AsyncResultHandler<String> doneHandler) {
+		Args.notNull(modName, "modName");
+		log.info("Install module: " + modName);
+
+		final ActionFuture<String> future = new ActionFuture<>();
+		final Iterator<ModuleRepository> iter = this.moduleRepositories.iterator();
+
+		final AsyncResultHandler<String> handler = new AsyncResultHandler<String>() {
+			@Override
+			public void handle(AsyncResult<String> res) {
+				if (res.failed()) {
+					if (iter.hasNext()) {
+						iter.next().installMod(modName, modRoot, this);
+					} else {
+						if (doneHandler != null) {
+							doneHandler.handle(res);
+						}
+						future.countDown(log, "Module with name '" + modName + "' not found in any of the repositories");
+					}
+				} else {
+					if (doneHandler != null) {
+						doneHandler.handle(res);
+					}
+					future.countDown(res);
+				}
+			}
+		};
+
+		handler.handle(new AsyncResult<String>(new RuntimeException()));
+
+		return future;
 	}
 
 	/**
-	 * (Async) Install a single module without its dependencies: download from 
-	 * a repository and unzip into modRoot. Existing files will be replaced, extraneous 
-	 * files will not be removed. Uninstall first, if you want to delete all associated files.
+	 * Install a Module including all of its dependencies
 	 * 
 	 * @param modName
+	 * @param doneHandler
+	 * @return
 	 */
-	public AsyncResult<Void> installOne(final String modName, int timeout, TimeUnit unit) {
-		Args.notNull(modName, "modName");
-  	log.info("Install module: " + modName);
-    AsyncResult<Void> res = null;
-  	for (ModuleRepository repo: this.moduleRepositories) {
-  		ActionFuture<Void> f = repo.installMod(modName, this.modRoot, null);
-	    res = f.get(timeout, unit);
-	    if (res == null) {
-	      log.error(message("Timeout while waiting to download", modName, repo));
-	    } else if (res.failed()) {
-	    	log.error(message("Failed to install", modName, repo));
-	    } else {
-	    	log.info(message("Successfully installed", modName, repo));
-	    	break;
-	    }
-  	}
-  	return res;
-  }
+	public ActionFuture<Void> install(final String modName, final Handler<Void> doneHandler) {
+		final CountingCompletionHandler<Void> count = new CountingCompletionHandler<Void>(vertx.getContext(), doneHandler);
+		count.incRequired();
+		final Set<String> done = new HashSet<>();
+		AsyncResultHandler<String> handler = new AsyncResultHandler<String>() {
+			@Override
+			public void handle(AsyncResult<String> res) {
+				if (res.succeeded()) {
+					String name = res.result;
+					if (!done.contains(name)) {
+						done.add(name);
+						VertxModule module = module(name);
+						if (module.exists() == false) {
+							log.error("Ups. The module should really be available: " + name);
+						}
+						for (String inc : module.config().includes()) {
+							VertxModule m = module(inc);
+							count.incRequired();
+							if (!m.exists()) {
+								installOne(inc, this);
+							} else {
+								handle(new AsyncResult<String>(inc));
+							}
+						}
+					}
+					count.incCompleted();
+				}
+			}
+		};
 
-	private String message(String prefix, String modName, ModuleRepository repo) {
-  	return prefix + " module '" + modName + "' from repository: " + repo.toString();
+		VertxModule module = module(modName);
+		if (module.exists()) {
+			handler.handle(new AsyncResult<String>(modName));
+		} else {
+			installOne(modName, handler);
+		}
+
+		return count.future();
 	}
 
-  /**
-   * (Sync) Install a module and all its declared dependencies.
-   * 
-   * @param modName
-   * @return
-   */
-  public ModuleDependencies install(final String modName) {
-		return install(modName, new ModuleDependencies(modName));
-  }
-		
-  /**
-   * (Sync) Install a module and all its declared dependencies.
-   * 
-   * @param modName
-   * @return
-   */
-  public ModuleDependencies install(final String modName, final ModuleDependencies pdata) {
+	/**
+	 * Collect the aggregated config data such as classpath, jars etc.. And
+	 * validate that all required modules are installed.
+	 * 
+	 * @param modName
+	 * @return
+	 */
+	public ModuleDependencies checkModuleDependencies(final String modName) {
+		return checkModuleDependencies(modName, new ModuleDependencies(modName));
+	}
+
+	/**
+	 * (Sync) Install a module and all its declared dependencies.
+	 * 
+	 * @param modName
+	 * @return
+	 */
+	public ModuleDependencies checkModuleDependencies(final String modName, final ModuleDependencies pdata) {
 		Args.notNull(modName, "modName");
 		Args.notNull(pdata, "pdata");
 
 		pdata.runModule = modName;
-		
-	  /**
-	   * We walk through the graph of includes making sure we only add each one once.
-	   * We keep track of what jars have been included so we can flag errors if paths
-	   * are included more than once.
-	   * We make sure we only include each module once in the case of loops in the
-	   * graph.
-	   */
-    moduleWalker(modName, new ModuleVisitor<Void>() {
-    	@Override
-    	protected boolean onMissingModule(final VertxModule module, final ModuleWalker<Void> walker) 
-    			throws Exception {
-	      boolean rtn = installOne(module.name()).succeeded();
-	      if (!rtn) {
-	        pdata.failed("Failed to install module: " + module.name());
-	      } 
-	      return rtn;
-    	}
-    	
+
+		/**
+		 * We walk through the graph of includes making sure we only add each one
+		 * once. We keep track of what jars have been included so we can flag errors
+		 * if paths are included more than once. We make sure we only include each
+		 * module once in the case of loops in the graph.
+		 */
+		moduleWalker(modName, new ModuleVisitor<Void>() {
 			@Override
-			protected ModuleVisitResult visit(final VertxModule module, 
-					final ModuleWalker<Void> walker) {
+			protected boolean onMissingModule(final VertxModule module, final ModuleWalker<Void> walker) throws Exception {
+				pdata.failed("Missing module: " + module.name() + ". Please install.");
+				return false;
+			}
 
-		    if (!module.exists()) {
-	        pdata.failed("Failed to install module: " + module.name());
-		    	return ModuleVisitResult.TERMINATE;
-		    }
+			@Override
+			protected ModuleVisitResult visit(final VertxModule module, final ModuleWalker<Void> walker) {
 
-		    if (pdata.includedModules.contains(module.name())) {
-		    	return ModuleVisitResult.SKIP_SUBTREE;
-		    }
-		    
-		    pdata.includedModules.add(module.name());
+				if (!module.exists()) {
+					pdata.failed("Failed to install module: " + module.name());
+					return ModuleVisitResult.TERMINATE;
+				}
 
-		    // Add the urls for this module
-		    pdata.urls.add(module.modDir().toURI());
-		    for (File jar: module.files(LIB_DIR)) {
-	        String prevMod = pdata.includedJars.get(jar.getName());
-	        if (prevMod != null) {
-	          log.warn("Warning! jar file " + jar.getName() + " is contained in module(s) [" +
-	                   prevMod + "] and also in module " + modName +
-	                   " which are both included (perhaps indirectly) by module " +
-	                   pdata.runModule);
-	          
-	          pdata.includedJars.put(jar.getName(), prevMod + ", " + modName);
-	        } else {
-	          pdata.includedJars.put(jar.getName(), modName);
-	        }
-	        pdata.urls.add(jar.toURI());
-		    }
-		    
+				if (pdata.includedModules.contains(module.name())) {
+					return ModuleVisitResult.SKIP_SUBTREE;
+				}
+
+				pdata.includedModules.add(module.name());
+
+				// Add the urls for this module
+				pdata.urls.add(module.modDir().toURI());
+				for (File jar : module.files(LIB_DIR)) {
+					String prevMod = pdata.includedJars.get(jar.getName());
+					if (prevMod != null) {
+						log.warn("Warning! jar file " + jar.getName() + " is contained in module(s) [" + prevMod
+								+ "] and also in module " + modName + " which are both included (perhaps indirectly) by module "
+								+ pdata.runModule);
+
+						pdata.includedJars.put(jar.getName(), prevMod + ", " + modName);
+					} else {
+						pdata.includedJars.put(jar.getName(), modName);
+					}
+					pdata.urls.add(jar.toURI());
+				}
+
 				return ModuleVisitResult.CONTINUE;
 			}
-    });
+		});
 
-    VertxModule module = module(modName);
-    
-    String main = module.config().main();
-    if (main == null) {
-      return pdata.failed("Runnable module " + modName + " mod.json must contain a \"main\" field");
-    }
+		VertxModule module = module(modName);
 
-    return pdata;
-  }
-	
+		String main = module.config().main();
+		if (main == null) {
+			return pdata.failed("Runnable module " + modName + " mod.json must contain a \"main\" field");
+		}
+
+		return pdata;
+	}
+
 	/**
 	 * (Sync) Uninstall a module (but not its dependencies): delete the directory
 	 * 
 	 * @param modName
 	 */
-  public void uninstall(final String modName) {
-    log.info("Uninstalling module " + modName + " from directory " + modRoot.getAbsolutePath());
-    File modDir = new File(modRoot, modName);
-    if (!modDir.exists()) {
-      log.error("Cannot find module directory to delete: " + modDir.getAbsolutePath());
-    } else {
-      try {
-        vertx.fileSystem().deleteSync(modDir.getAbsolutePath(), true);
-        log.info("Module " + modName + " successfully uninstalled (directory deleted)");
-      } catch (Exception e) {
-        log.error("Failed to delete directory: " + modDir.getAbsoluteFile(), e);
-      }
-    }
-  }
+	public void uninstall(final String modName) {
+		log.info("Uninstalling module " + modName + " from directory " + modRoot.getAbsolutePath());
+		File modDir = new File(modRoot, modName);
+		if (!modDir.exists()) {
+			log.error("Cannot find module directory to delete: " + modDir.getAbsolutePath());
+		} else {
+			try {
+				vertx.fileSystem().deleteSync(modDir.getAbsolutePath(), true);
+				log.info("Module " + modName + " successfully uninstalled (directory deleted)");
+			} catch (Exception e) {
+				log.error("Failed to delete directory: " + modDir.getAbsoluteFile(), e);
+			}
+		}
+	}
 
-  /*
-   * Walk the module tree
-   */
-  public final <T> T moduleWalker(String modName, ModuleVisitor<T> visitor) {
-  	return new ModuleWalker<T>(this).visit2(modName, visitor);
-  }
-  
-  /**
-   * Print out the module tree
-   * 
-   * @param modName
-   * @param out
-   */
-  public void printModuleTree(final String modName, final PrintStream out) {
-  	try {
-	    moduleWalker(modName, new ModuleVisitor<Void>() {
+	/**
+	 * Walk the module tree
+	 */
+	public final <T> T moduleWalker(String modName, ModuleVisitor<T> visitor) {
+		return new ModuleWalker<T>(this).visit2(modName, visitor);
+	}
+
+	/**
+	 * Print out the module tree
+	 * 
+	 * @param modName
+	 * @param out
+	 */
+	public void printModuleTree(final String modName, final PrintStream out) {
+		try {
+			moduleWalker(modName, new ModuleVisitor<Void>() {
 				@Override
 				protected ModuleVisitResult visit(VertxModule module, ModuleWalker<Void> walker) {
 					StringBuilder buf = new StringBuilder();
 					buf.append("-");
-					for (int i=0; i < (walker.stack().size() - 1) * 2; i++) {
+					for (int i = 0; i < (walker.stack().size() - 1) * 2; i++) {
 						buf.append("-");
 					}
 					buf.append(" ");
@@ -334,9 +382,10 @@ public class ModuleManager {
 					}
 					out.println(buf.toString());
 					return ModuleVisitResult.CONTINUE;
-				}});
-  	} catch (Exception ex) {
-  		log.error(ex);
-  	}
-  }
+				}
+			});
+		} catch (Exception ex) {
+			log.error(ex);
+		}
+	}
 }

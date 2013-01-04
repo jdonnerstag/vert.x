@@ -25,7 +25,8 @@ import org.vertx.java.core.json.JsonObject;
 import org.vertx.java.core.utils.lang.Args;
 
 /**
- * A little utility class combining all "get module config" work and make access more safe.
+ * A little utility class combining all "get module config" work and make access
+ * more safe.
  * 
  * @author <a href="http://tfox.org">Tim Fox</a>
  * @author Juergen Donnerstag
@@ -53,22 +54,22 @@ public class ModuleConfig {
 	public static final File getFile(final File modDir, final String modName) {
 		return getFile(modDir, modName, CONFIG_FILENAME);
 	}
-	
+
 	public static final File getFile(final File modDir, final String modName, final String configFile) {
 		Args.notNull(modDir, "modDir");
 		Args.notNull(modName, "modName");
 		Args.notNull(configFile, "configFile");
-		
+
 		return new File(modDir, modName + "/" + configFile);
 	}
-	
+
 	/**
 	 * Constructor
 	 */
 	public ModuleConfig() {
 		this(new JsonObject());
 	}
-	
+
 	/**
 	 * Constructor
 	 */
@@ -102,8 +103,8 @@ public class ModuleConfig {
 		try {
 			config = new JsonObject(configFile());
 		} catch (Exception ex) {
-			throw new RuntimeException("Failed to load config for module '" + modName() + 
-					"' from " + modDir.getAbsolutePath(), ex);
+			throw new RuntimeException("Failed to load config for module '" + modName() + "' from "
+					+ modDir.getAbsolutePath(), ex);
 		}
 	}
 
@@ -114,7 +115,7 @@ public class ModuleConfig {
 	public final String configFile2() {
 		return new File(this.modDir, CONFIG_FILENAME).getAbsolutePath();
 	}
-	
+
 	public final JsonObject json() {
 		return config;
 	}
@@ -129,7 +130,7 @@ public class ModuleConfig {
 		}
 		return modDir.getName();
 	}
-	
+
 	public final String main() {
 		return config.getString(CONFIG_MAIN);
 	}
@@ -137,7 +138,7 @@ public class ModuleConfig {
 	public final void main(String main) {
 		config.putString(CONFIG_MAIN, main);
 	}
-	
+
 	public final boolean worker() {
 		return config.getBoolean(CONFIG_WORKER, false);
 	}
@@ -145,7 +146,7 @@ public class ModuleConfig {
 	public final void worker(boolean worker) {
 		config.putBoolean(CONFIG_WORKER, worker);
 	}
-	
+
 	public final boolean preserveCwd() {
 		return config.getBoolean(CONFIG_PRESERVE_CWD, false);
 	}
@@ -153,7 +154,7 @@ public class ModuleConfig {
 	public final void preserveCwd(boolean preserveCwd) {
 		config.putBoolean(CONFIG_PRESERVE_CWD, preserveCwd);
 	}
-	
+
 	public final boolean autoRedeploy() {
 		return config.getBoolean(CONFIG_AUTO_REDEPLOY, false);
 	}
@@ -169,7 +170,7 @@ public class ModuleConfig {
 	public final void includes(String includes) {
 		config.putString(CONFIG_INCLUDES, includes);
 	}
-	
+
 	/**
 	 * Get the list of elements from a comma separated list. The elements will be
 	 * trimmed, and empty entries are ignored. That is, non element returned will
@@ -181,7 +182,7 @@ public class ModuleConfig {
 	public static List<String> getParameterList(final String arg) {
 		return getParameterList(arg, ",");
 	}
-	
+
 	/**
 	 * Get the list of elements from a comma separated list. The elements will be
 	 * trimmed, and empty entries are ignored. That is, non element returned will

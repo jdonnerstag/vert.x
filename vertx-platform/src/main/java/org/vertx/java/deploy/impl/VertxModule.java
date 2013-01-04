@@ -24,14 +24,16 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import org.vertx.java.core.Handler;
+import org.vertx.java.core.impl.ActionFuture;
 import org.vertx.java.core.logging.Logger;
 import org.vertx.java.core.logging.impl.LoggerFactory;
 import org.vertx.java.core.utils.lang.Args;
 
 /**
  * Vertx modules are essentially a deployment unit. There are installed in their
- * own subdirectory. This little helper provides easy access to typical module data,
- * such as the config (mod.json), lib files, its directory, etc.
+ * own subdirectory. This little helper provides easy access to typical module
+ * data, such as the config (mod.json), lib files, its directory, etc.
  * 
  * @author Juergen Donnerstag
  */
@@ -40,7 +42,7 @@ public class VertxModule {
 	private static final Logger log = LoggerFactory.getLogger(VertxModule.class);
 
 	public static final ModuleConfig NULL_CONFIG = new ModuleConfig();
-	
+
 	public static final boolean exists(final File modDir, final String modName) {
 		return getModDir(modDir, modName).canRead();
 	}
@@ -48,19 +50,19 @@ public class VertxModule {
 	public static final File getModDir(final File modDir, final String modName) {
 		Args.notNull(modDir, "modDir");
 		Args.notNull(modName, "modName");
-		
+
 		return new File(modDir, modName);
 	}
 
-  private final ModuleManager moduleManager;
+	private final ModuleManager moduleManager;
 	private final String modName;
 	private final File modDir;
 	private ModuleConfig config;
 	private ModuleDependencies dependencies;
-	
+
 	/**
-	 * Constructor. The module name (modName) might be null, in which case we don't search
-	 * for the config or lib files in the module directory.
+	 * Constructor. The module name (modName) might be null, in which case we
+	 * don't search for the config or lib files in the module directory.
 	 */
 	public VertxModule(final ModuleManager moduleManager, final String modName) {
 		this.moduleManager = Args.notNull(moduleManager, "moduleManager");
@@ -94,18 +96,18 @@ public class VertxModule {
 	 * @return
 	 */
 	public final VertxModule loadConfig(final boolean throwException) {
-    try {
-	    config = new ModuleConfig(modDir);
-    } catch (Exception ex) {
-    	if (throwException) {
-    		throw new RuntimeException(ex);
-    	} else {
-    		log.error("Failed to load config for module '" + modName + "' from " + modDir.getAbsolutePath());
-    	}
-    } finally {
-    	this.dependencies = null;
-    }
-    return null;
+		try {
+			config = new ModuleConfig(modDir);
+		} catch (Exception ex) {
+			if (throwException) {
+				throw new RuntimeException(ex);
+			} else {
+				log.error("Failed to load config for module '" + modName + "' from " + modDir.getAbsolutePath());
+			}
+		} finally {
+			this.dependencies = null;
+		}
+		return null;
 	}
 
 	public final ModuleConfig config() {
@@ -133,32 +135,36 @@ public class VertxModule {
 
 	/**
 	 * Install the module and all its dependencies
+	 * 
 	 * @return
 	 */
-	public final ModuleDependencies install() {
-		if (modName != null) {
-			this.dependencies = moduleManager.install(modName);
-		} else {
-			for (String name: config.includes()) {
-				moduleManager.install(name, this.dependencies);
+	public final ActionFuture<Void> install(final Handler<Void> doneHandler) {
+		Args.notNull(modName, "modName");
+		return moduleManager.install(modName, doneHandler);
+	}
+
+	/**
+	 */
+	public final ModuleDependencies checkDependencies() {
+		if (this.dependencies == null) {
+			if (modName != null) {
+				this.dependencies = moduleManager.checkModuleDependencies(modName);
+			} else {
+				for (String name : config.includes()) {
+					moduleManager.checkModuleDependencies(name, this.dependencies);
+				}
 			}
 		}
 		return this.dependencies;
 	}
 
-	private void check() {
-		if (this.dependencies == null) {
-			install();
-		}
-	}
-	
 	/**
 	 * All modules this module is dependent on
 	 * 
 	 * @return
 	 */
 	public final List<String> requiredModules() {
-		check();
+		checkDependencies();
 		return this.dependencies.includedModules;
 	}
 
@@ -168,45 +174,45 @@ public class VertxModule {
 	 * @return
 	 */
 	public final List<URI> classPath() {
-		check();
+		checkDependencies();
 		return this.dependencies.urls;
 	}
 
 	public final URL[] classPath2() {
-		check();
+		checkDependencies();
 		return uriArrayToUrlArray(this.dependencies.urls);
 	}
 
 	private URL[] uriArrayToUrlArray(final List<URI> uris) {
-    final URL[] urls = new URL[uris.size()];
-    for (int i=0; i < urls.length; i++) {
-    	try {
+		final URL[] urls = new URL[uris.size()];
+		for (int i = 0; i < urls.length; i++) {
+			try {
 				urls[i] = uris.get(i).toURL();
 			} catch (MalformedURLException ex) {
 				log.error("URI to URL conversion error", ex);
 			}
-    }
+		}
 		return urls;
 	}
-	
+
 	public final void classPath(final List<URI> cp, boolean clear) {
-		check();
+		checkDependencies();
 		if (clear) {
 			this.dependencies.urls.clear();
 		}
 		this.dependencies.urls.addAll(cp);
 	}
-	
+
 	public final List<File> files(final String subdir) {
 		File libDir = new File(modDir(), subdir);
 		if (libDir.exists()) {
 			File[] files = libDir.listFiles();
 			return Arrays.asList(files);
-			
+
 		}
 		return Collections.emptyList();
 	}
-	
+
 	@Override
 	public String toString() {
 		return "name: " + modName + "; dir: " + modDir;

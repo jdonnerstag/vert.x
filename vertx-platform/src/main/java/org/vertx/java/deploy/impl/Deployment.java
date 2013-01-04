@@ -28,48 +28,48 @@ import java.util.UUID;
  */
 public class Deployment {
 	// Every deployment has a unique name
-  public final String name;
-  
-  // One module can be associated with a deployment
-  // (A module may have dependencies on other modules)
-  public final VertxModule module;
+	public final String name;
 
-  // Number of instances of the same Verticle that are started 
-  // on (hopefully) different threads
-  public final int instances;
-  
-  // working directory  (see preserve-cwd)
-  public final File currentModDir;
+	// One module can be associated with a deployment
+	// (A module may have dependencies on other modules)
+	public final VertxModule module;
 
-  // One holder for each instance
-  public final List<VerticleHolder> verticles = new ArrayList<>();
+	// Number of instances of the same Verticle that are started
+	// on (hopefully) different threads
+	public final int instances;
 
-  // Deployment tree
-  public final List<String> childDeployments = new ArrayList<>();
-  public final String parentDeploymentName;
+	// working directory (see preserve-cwd)
+	public final File currentModDir;
 
-  /**
-   * Constructor
-   */
-  public Deployment(final String name, final VertxModule module, final int instances, 
-  		final File currentModDir,  final String parentDeploymentName) {
-    this.name = (name != null ? name : createName());
-    this.module = Args.notNull(module, "module");
-    this.instances = instances;
-    this.currentModDir = currentModDir;
-    this.parentDeploymentName = parentDeploymentName;
-  }
+	// One holder for each instance
+	public final List<VerticleHolder> verticles = new ArrayList<>();
 
-  /**
-   * Extension point: 
-   * 
-   * @return
-   */
-  protected String createName() {
-    return "deployment-" + UUID.randomUUID().toString();
-  }
-  
-  public final boolean hasParent() {
-  	return parentDeploymentName != null;
-  }
+	// Deployment tree
+	public final List<String> childDeployments = new ArrayList<>();
+	public final String parentDeploymentName;
+
+	/**
+	 * Constructor
+	 */
+	public Deployment(final String name, final VertxModule module, final int instances, final File currentModDir,
+			final String parentDeploymentName) {
+		this.name = (name != null ? name : createName());
+		this.module = Args.notNull(module, "module");
+		this.instances = instances;
+		this.currentModDir = currentModDir;
+		this.parentDeploymentName = parentDeploymentName;
+	}
+
+	/**
+	 * Extension point:
+	 * 
+	 * @return
+	 */
+	protected String createName() {
+		return "deployment-" + UUID.randomUUID().toString();
+	}
+
+	public final boolean hasParent() {
+		return parentDeploymentName != null;
+	}
 }

@@ -36,7 +36,8 @@ import org.vertx.java.core.logging.impl.LoggerFactory;
 import org.vertx.java.core.utils.lang.Args;
 
 /**
- * A customized HttpClient making (file) downloads more easy. Also supporting proxy hosts.
+ * A customized HttpClient making (file) downloads more easy. Also supporting
+ * proxy hosts.
  * 
  * @author <a href="http://tfox.org">Tim Fox</a>
  * @author Juergen Donnerstag
@@ -44,42 +45,42 @@ import org.vertx.java.core.utils.lang.Args;
 public class DownloadHttpClient extends DefaultHttpClient {
 
 	private static final Logger log = LoggerFactory.getLogger(DownloadHttpClient.class);
-	
+
 	private final VertxInternal vertx;
-	
+
 	// Proxy Host and Port
 	private final String proxyHost;
-  private final int proxyPort;
+	private final int proxyPort;
 
-  // Download server and port
-  private String host;
-  private int port;
+	// Download server and port
+	private String host;
+	private int port;
 
-  // User provided exception handler
-  private Handler<Exception> exceptionHandler;
+	// User provided exception handler
+	private Handler<Exception> exceptionHandler;
 
-  // Wait until download finished (successful or unsuccessful)
-  private final ActionFuture<Void> latch = new ActionFuture<>();
-  
-  // The data (e.g. file content) being downloaded
-  private final AtomicReference<Buffer> mod = new AtomicReference<>();
+	// Wait until download finished (successful or unsuccessful)
+	private final ActionFuture<Void> latch = new ActionFuture<>();
 
-  private Handler<Buffer> backgroundHandler;
-  private AsyncResultHandler<Void> doneHandler;
-  
+	// The data (e.g. file content) being downloaded
+	private final AtomicReference<Buffer> mod = new AtomicReference<>();
+
+	private Handler<Buffer> backgroundHandler;
+	private AsyncResultHandler<Void> doneHandler;
+
 	/**
 	 * Constructor
 	 */
 	public DownloadHttpClient(final VertxInternal vertx) {
 		this(vertx, null, 0);
 	}
-	
+
 	/**
 	 * Constructor
 	 */
 	public DownloadHttpClient(final VertxInternal vertx, final String proxyHost, final int proxyPort) {
 		super(vertx);
-		
+
 		this.vertx = Args.notNull(vertx, "vertx");
 		this.proxyHost = proxyHost;
 		this.proxyPort = proxyPort;
@@ -94,26 +95,26 @@ public class DownloadHttpClient extends DefaultHttpClient {
 		this.backgroundHandler = handler;
 	}
 
-  public void doneHandler(AsyncResultHandler<Void> handler) {
-  	this.doneHandler = handler;
-  }
+	public void doneHandler(AsyncResultHandler<Void> handler) {
+		this.doneHandler = handler;
+	}
 
-  public final ActionFuture<Void> future() {
-  	return this.latch;
-  }
-  
+	public final ActionFuture<Void> future() {
+		return this.latch;
+	}
+
 	@Override
 	public DefaultHttpClient setHost(String host) {
 		this.host = host;
 		return this;
 	}
-	
+
 	@Override
 	public DefaultHttpClient setPort(int port) {
 		this.port = port;
 		return this;
 	}
-	
+
 	@Override
 	public HttpClientRequest get(String uri, final Handler<HttpClientResponse> responseHandler) {
 
@@ -131,61 +132,63 @@ public class DownloadHttpClient extends DefaultHttpClient {
 		} catch (MalformedURLException ignore) {
 		}
 
-    final String url = (protocol == null ? "http" : protocol) + "://" + host + (port == 0 ? "" : ":" + port) + uri;
+		final String url = (protocol == null ? "http" : protocol) + "://" + host + (port == 0 ? "" : ":" + port) + uri;
 
-    if (proxyHost != null) {
-      super.setHost(proxyHost);
-      super.setPort(proxyPort);
-      // The proxy needs the host and port in the url  to forward the request
-      uri = url;
-    } else {
-    	super.setHost(host);
-    	super.setPort(port);
-    }
+		if (proxyHost != null) {
+			super.setHost(proxyHost);
+			super.setPort(proxyPort);
+			// The proxy needs the host and port in the url to forward the request
+			uri = url;
+		} else {
+			super.setHost(host);
+			super.setPort(port);
+		}
 
-    // Register our exception handler, and forward to user provided handler if present
-    exceptionHandler(new Handler<Exception>() {
-      public void handle(Exception e) {
-      	log.error("Error while downloading", e);
-      	if (exceptionHandler != null) {
-      		try {
-      			exceptionHandler.handle(e);
-      		} catch (Exception ex) {
-      			log.error("Exception during exception handling => ignore", ex);
-      		}
-      	}
-      	DownloadHttpClient.this.callDoneHandler(null, e);
-      }
-    });
-    
-    HttpClientRequest req = super.get(uri, new Handler<HttpClientResponse>() {
-      public void handle(HttpClientResponse resp) {
-      	// forward to the user provided handler, if present
-      	if (responseHandler != null) {
-      		responseHandler.handle(resp);
-      	}
-        if (resp.statusCode == 200) {
-          resp.bodyHandler(new Handler<Buffer>() {
-            public void handle(final Buffer buffer) {
-              // Make sure we can access the buffer outside the handler
-            	mod.set(buffer);
-              handleData(buffer);
-            }
-          });
-        } else if (resp.statusCode == 404) {
-        	throw new HttpException(404, url, "File not found");
-        } else {
-          throw new HttpException(resp.statusCode, url, "Download failure");
-        }
-      }
-    });
-    
-    req.putHeader(HttpHeaders.Names.HOST, proxyHost != null ? proxyHost : host);
-    return req;
+		// Register our exception handler, and forward to user provided handler if
+		// present
+		exceptionHandler(new Handler<Exception>() {
+			public void handle(Exception e) {
+				log.error("Error while downloading", e);
+				if (exceptionHandler != null) {
+					try {
+						exceptionHandler.handle(e);
+					} catch (Exception ex) {
+						log.error("Exception during exception handling => ignore", ex);
+					}
+				}
+				DownloadHttpClient.this.callDoneHandler(null, e);
+			}
+		});
+
+		HttpClientRequest req = super.get(uri, new Handler<HttpClientResponse>() {
+			public void handle(HttpClientResponse resp) {
+				// forward to the user provided handler, if present
+				if (responseHandler != null) {
+					responseHandler.handle(resp);
+				}
+				if (resp.statusCode == 200) {
+					resp.bodyHandler(new Handler<Buffer>() {
+						public void handle(final Buffer buffer) {
+							// Make sure we can access the buffer outside the handler
+							mod.set(buffer);
+							handleData(buffer);
+						}
+					});
+				} else if (resp.statusCode == 404) {
+					throw new HttpException(404, url, "File not found");
+				} else {
+					throw new HttpException(resp.statusCode, url, "Download failure");
+				}
+			}
+		});
+
+		req.putHeader(HttpHeaders.Names.HOST, proxyHost != null ? proxyHost : host);
+		return req;
 	}
 
 	private void handleData(final Buffer buffer) {
-  	log.info("Thread: " + Thread.currentThread().getName() + " " + Thread.currentThread().getId() + "; Context: " + vertx.getContext());
+		log.info("Thread: " + Thread.currentThread().getName() + " " + Thread.currentThread().getId() + "; Context: "
+				+ vertx.getContext());
 		if (backgroundHandler != null) {
 			final Context ctx = vertx.getContext();
 			ctx.executeOnWorker(new Runnable() {
@@ -194,7 +197,8 @@ public class DownloadHttpClient extends DefaultHttpClient {
 					Exception e = null;
 					try {
 						log.error(">> blocking action: unzip");
-			    	log.info("Thread: " + Thread.currentThread().getName() + " " + Thread.currentThread().getId() + "; Context: " + vertx.getContext());
+						log.info("Thread: " + Thread.currentThread().getName() + " " + Thread.currentThread().getId()
+								+ "; Context: " + vertx.getContext());
 						backgroundHandler.handle(buffer);
 						log.error("<< blocking action: unzip");
 					} catch (Exception ex) {
@@ -226,27 +230,27 @@ public class DownloadHttpClient extends DefaultHttpClient {
 		}
 		latch.countDown(res);
 	}
-	
+
 	/**
 	 * 
 	 */
 	public static class HttpException extends RuntimeException {
 
 		private static final long serialVersionUID = 1L;
-		
+
 		private final int statusCode;
 		private final String url;
-		
+
 		public HttpException(int statusCode, String url, String msg) {
 			super(statusCode + ": " + msg + " [" + url + "]");
 			this.statusCode = statusCode;
 			this.url = url;
 		}
-		
+
 		public int statusCode() {
 			return statusCode;
 		}
-		
+
 		public String url() {
 			return url;
 		}

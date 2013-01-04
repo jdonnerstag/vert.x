@@ -29,7 +29,8 @@ import org.vertx.java.core.utils.lang.Args;
 import org.vertx.java.deploy.ModuleRepository;
 
 /**
- * A local module repository which searches for unzipped modules in a local directory
+ * A local module repository which searches for unzipped modules in a local
+ * directory
  * 
  * @author Juergen Donnerstag
  */
@@ -40,7 +41,7 @@ public class LocalModuleRepository implements ModuleRepository {
 	private final VertxInternal vertx;
 
 	private final File repoDir;
-	
+
 	/**
 	 * Constructor
 	 */
@@ -51,7 +52,7 @@ public class LocalModuleRepository implements ModuleRepository {
 			throw new IllegalStateException("Repository directory does not exist: " + repoDir.getAbsolutePath());
 		}
 	}
-	
+
 	/**
 	 * Install a module from a remote (http) repository.
 	 * 
@@ -61,43 +62,44 @@ public class LocalModuleRepository implements ModuleRepository {
 	 * @param doneHandler
 	 */
 	@Override
-	public ActionFuture<Void> installMod(final String moduleName, final File modRoot, final AsyncResultHandler<Void> doneHandler) {
+	public ActionFuture<Void> installMod(final String moduleName, final File modRoot,
+			final AsyncResultHandler<String> doneHandler) {
 		Args.notNull(moduleName, "moduleName");
-    
+
 		ActionFuture<Void> future = new ActionFuture<Void>();
-		AsyncResult<Void> res = null;
+		AsyncResult<String> res = null;
 
 		if (repoDir.getAbsolutePath().equals(modRoot.getAbsolutePath())) {
-			res = new AsyncResult<Void>(new RuntimeException(
-					"Repository directory must not be equal to module directory:" + modRoot.getAbsolutePath()));
+			res = new AsyncResult<String>(new RuntimeException("Repository directory must not be equal to module directory:"
+					+ modRoot.getAbsolutePath()));
 		} else {
 			File modDir = new File(repoDir, moduleName);
 			if (modDir.exists() == false) {
-				res = new AsyncResult<Void>(new FileNotFoundException(
-						"Module '" + moduleName + "' not found in Repository '" + repoDir.getAbsolutePath() + "'"));
+				res = new AsyncResult<String>(new FileNotFoundException("Module '" + moduleName + "' not found in Repository '"
+						+ repoDir.getAbsolutePath() + "'"));
 			} else {
 				try {
 					String from = new File(repoDir, moduleName).getAbsolutePath();
 					String to = new File(modRoot, moduleName).getAbsolutePath();
 					log.info("Copy from " + from + " to " + to);
 					vertx.fileSystem().copySync(from, to, true);
-					res = new AsyncResult<Void>((Void)null);
+					res = new AsyncResult<String>(moduleName);
 				} catch (Exception ex) {
-					res = new AsyncResult<Void>(new RuntimeException (
-							"Error while installing module '" + moduleName + "' from Repository '" + repoDir.getAbsolutePath() + "'", ex));
+					res = new AsyncResult<String>(new RuntimeException("Error while installing module '" + moduleName
+							+ "' from Repository '" + repoDir.getAbsolutePath() + "'", ex));
 				}
 			}
 		}
-		
+
 		if (doneHandler != null) {
 			doneHandler.handle(res);
 		}
-		future.countDown(res);
+		future.countDown(new AsyncResult<Void>(res.exception));
 		return future;
 	}
-  
-  @Override
-  public String toString() {
-  	return repoDir.getAbsolutePath();
-  }
+
+	@Override
+	public String toString() {
+		return repoDir.getAbsolutePath();
+	}
 }

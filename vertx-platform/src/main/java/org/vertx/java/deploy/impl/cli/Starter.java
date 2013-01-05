@@ -16,24 +16,32 @@
 
 package org.vertx.java.deploy.impl.cli;
 
-import org.vertx.java.core.Handler;
-import org.vertx.java.core.json.JsonObject;
-import org.vertx.java.core.logging.Logger;
-import org.vertx.java.core.logging.impl.LoggerFactory;
-import org.vertx.java.deploy.impl.CommandLineArgs;
-import org.vertx.java.deploy.impl.ModuleConfig;
-import org.vertx.java.deploy.impl.VerticleManager;
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.net.*;
-import java.util.Arrays;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.net.Inet6Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.SocketException;
+import java.net.URI;
+import java.net.URL;
+import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.jar.Attributes;
+import java.util.jar.Manifest;
+
+import org.vertx.java.core.AsyncResult;
+import org.vertx.java.core.logging.Logger;
+import org.vertx.java.core.logging.impl.LoggerFactory;
+import org.vertx.java.deploy.impl.ModuleConfig;
+import org.vertx.java.deploy.impl.VerticleManager;
+import org.vertx.java.deploy.impl.VertxModule;
 
 /**
  * Command line starter
@@ -47,9 +55,6 @@ public class Starter {
 
 	private static final String CP_SEPARATOR = System.getProperty("path.separator");
 
-	// TODO shouldn't that come from gradle? E.g. some file content??
-	private static final String VERSION = "vert.x-1.3.0.final";
-
 	public static void main(String[] args) {
 		try {
 			if (new Starter().run(args) == false) {
@@ -59,7 +64,7 @@ public class Starter {
 			log.error(ex);
 		}
 	}
-
+	
 	/**
 	 * Constructor
 	 */
@@ -80,7 +85,7 @@ public class Starter {
 
 		String command = sargs[0].toLowerCase();
 		if ("version".equals(command)) {
-			System.out.println(VERSION);
+			System.out.println(getVersion());
 			return true;
 		}
 
@@ -112,23 +117,37 @@ public class Starter {
 	protected final void installModule(final String modName, final CommandLineArgs args) {
 		String repo = args.get("-repo");
 
-		try (ExtendedDefaultVertx vertx = new ExtendedDefaultVertx()) {
+		try (ExtendedDefaultVertx vertx = newExtendedDefaultVertx()) {
 			vertx.moduleRepository(repo);
-			if (vertx.moduleManager(null).install(modName, null).get(30, TimeUnit.SECONDS) == null) {
+			if (doInstall(vertx, modName) == null) {
 				log.error("Timed out while waiting for module to install");
 			}
 		}
 	}
 
-	private void uninstallModule(String modName) {
-		try (ExtendedDefaultVertx vertx = new ExtendedDefaultVertx()) {
-			vertx.moduleManager(null).uninstall(modName);
+	/**
+	 * Extension point
+	 */
+	protected AsyncResult<Void> doInstall(ExtendedDefaultVertx vertx, String modName) {
+		return vertx.moduleManager(null).install(modName, null).get(30, TimeUnit.SECONDS);
+	}
+	
+	protected final void uninstallModule(String modName) {
+		try (ExtendedDefaultVertx vertx = newExtendedDefaultVertx()) {
+			doUninstall(vertx, modName);
 		}
 	}
 
-	protected final void runVerticle(final boolean module, final String main, final CommandLineArgs args)
-			throws Exception {
+	/**
+	 * Extension point
+	 */
+	protected void doUninstall(ExtendedDefaultVertx vertx, String modName) {
+		vertx.moduleManager(null).uninstall(modName);
+	}
 
+	protected final void runVerticle(final boolean bModule, final String main, final CommandLineArgs args)
+			throws Exception {
+		
 		// TODO get cluster and repo defaults from VertxConfig
 		int clusterPort = 0;
 		String clusterHost = null;
@@ -148,7 +167,7 @@ public class Starter {
 			}
 		}
 
-		try (ExtendedDefaultVertx vertx = new ExtendedDefaultVertx(clusterPort, clusterHost)) {
+		try (ExtendedDefaultVertx vertx = newExtendedDefaultVertx(clusterHost, clusterPort)) {
 
 			String repo = args.get("-repo");
 			vertx.moduleRepository(repo);
@@ -156,7 +175,7 @@ public class Starter {
 			boolean worker = args.present("-worker");
 
 			String cp = args.get("-cp", ".");
-			URI[] urls = classpath(cp);
+			List<URI> urls = classpath(cp);
 
 			int instances = args.getInt("-instances", 1, -1);
 			if (instances < 1) {
@@ -166,45 +185,61 @@ public class Starter {
 			}
 
 			String configFile = args.get("-conf");
-			JsonObject conf = null;
+			ModuleConfig conf = null;
 			if (configFile != null) {
-				conf = new ModuleConfig(new File(configFile)).json();
+				conf = new ModuleConfig(new File(configFile));
 			}
 
 			final VerticleManager verticleManager = vertx.verticleManager();
-			Handler<String> doneHandler = new Handler<String>() {
-				public void handle(String id) {
-					if (id == null) {
-						// Failed to deploy
-						verticleManager.unblock();
-					}
-				}
-			};
+			VertxModule module = new VertxModule(vertx.moduleManager(null), null);
+			module.config(conf);
+			// Allow to take main from the config
+			if (main != null && main.trim().length() > 0) {
+				module.config().main(main);
+			}
+			module.config().worker(worker);
+			module.classPath(urls, false);
 
-			if (module) {
-				verticleManager.deployMod(main, conf, instances, null, doneHandler);
+			// TODO This is the only remaining difference between Verticle and Module??
+			AsyncResult<String> res;
+			if (bModule) {
+				res = doRun(vertx, module, instances);
 			} else {
 				String includes = args.get("-includes");
-				List<URI> uris = Arrays.asList(urls);
-				verticleManager.deployVerticle(worker, main, conf, uris, instances, null, includes, doneHandler);
+				if (includes != null) {
+					module.config().includes(includes);
+				}
+				res = doRun(vertx, module, instances);
 			}
 
-			verticleManager.block();
+			if (res == null) {
+				log.error("Timeout: while deploying verticle or module");
+			} else if (res.failed()) {
+				log.error("Error while deploying verticle or module: " + res.exception.getMessage());
+			} else {
+				verticleManager.block();
+			}
 		}
 	}
 
-	private URI[] classpath(String cp) {
+	/**
+	 * Extension point
+	 */
+	protected AsyncResult<String> doRun(ExtendedDefaultVertx vertx, VertxModule module, int instances) {
+		return vertx.verticleManager().deploy(null, module, instances, null, null).get(30, TimeUnit.SECONDS);
+	}
+
+	private List<URI> classpath(String cp) {
 		String[] parts;
 		if (cp.contains(CP_SEPARATOR)) {
 			parts = cp.split(CP_SEPARATOR);
 		} else {
 			parts = new String[] { cp };
 		}
-		int index = 0;
-		final URI[] urls = new URI[parts.length];
+		final List<URI> urls = new ArrayList<URI>();
 		for (String part : parts) {
 			URI url = new File(part).toURI();
-			urls[index++] = url;
+			urls.add(url);
 		}
 		return urls;
 	}
@@ -234,19 +269,51 @@ public class Starter {
 		return null;
 	}
 
+	protected final ExtendedDefaultVertx newExtendedDefaultVertx() {
+		return newExtendedDefaultVertx(null, 0);
+	}
+
+	protected ExtendedDefaultVertx newExtendedDefaultVertx(String hostname, int port) {
+		return new ExtendedDefaultVertx(hostname, port);
+	}
+	
+	public final String getVersion() {
+		String className = this.getClass().getSimpleName() + ".class";
+		String classPath = this.getClass().getResource(className).toString();
+		if (!classPath.startsWith("jar")) {
+		  // Class not from JAR
+		  return "<unknown> (not a jar)";
+		}
+		String manifestPath = classPath.substring(0, classPath.lastIndexOf("!") + 1) + 
+		    "/META-INF/MANIFEST.MF";
+		Manifest manifest;
+		try {
+			manifest = new Manifest(new URL(manifestPath).openStream());
+		} catch (IOException ex) {
+		  return "<unknown> (" + ex.getMessage() + ")";
+		}
+		Attributes attr = manifest.getMainAttributes();
+		return attr.getValue("Vertx-Version");
+	}
+	
 	/**
 	 * Prints the help text
 	 */
-	private static void displaySyntax() {
+	protected static void displaySyntax(final PrintWriter out) {
 		try (InputStream in = Starter.class.getResourceAsStream("help.txt");
 				InputStreamReader rin = new InputStreamReader(in);
 				BufferedReader bin = new BufferedReader(rin)) {
 			String line;
 			while (null != (line = bin.readLine())) {
-				System.out.println(line);
+				out.println(line);
+				out.flush();
 			}
 		} catch (IOException ex) {
 			log.error("Help text not found !?!");
 		}
+	}
+	
+	private static void displaySyntax() {
+		displaySyntax(new PrintWriter(new OutputStreamWriter(System.out)));
 	}
 }
